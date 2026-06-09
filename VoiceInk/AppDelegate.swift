@@ -55,6 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false  // stay alive as a menu-bar app
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager.stop()
     }

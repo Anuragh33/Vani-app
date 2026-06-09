@@ -4,13 +4,15 @@ struct StatusPopoverView: View {
     @EnvironmentObject private var session: DictationSession
     @EnvironmentObject private var settings: AppSettings
 
+    /// Set by MenuBarController so the popover can open the settings window
+    /// without a direct reference back to the controller.
+    static var openSettingsAction: (() -> Void)?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
             Divider()
             controls
-            Divider()
-            recent
             Divider()
             footer
         }
@@ -36,20 +38,17 @@ struct StatusPopoverView: View {
     }
 
     private var controls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Context").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Picker("", selection: $settings.context) {
-                    ForEach(DictationContext.allCases) { ctx in
-                        Text(ctx.rawValue).tag(ctx)
-                    }
+        HStack {
+            Text("Context").font(.caption).foregroundStyle(.secondary)
+            Spacer()
+            Picker("", selection: $settings.context) {
+                ForEach(DictationContext.allCases) { ctx in
+                    Text(ctx.rawValue).tag(ctx)
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(width: 160)
             }
-            Toggle("AI polish", isOn: $settings.polishEnabled)
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: 160)
         }
     }
 
@@ -78,12 +77,7 @@ struct StatusPopoverView: View {
     private var footer: some View {
         HStack {
             Button("Settings…") {
-                NSApp.activate(ignoringOtherApps: true)
-                if #available(macOS 14, *) {
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                } else {
-                    NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-                }
+                StatusPopoverView.openSettingsAction?()
             }
             Spacer()
             Button("Quit") { NSApp.terminate(nil) }

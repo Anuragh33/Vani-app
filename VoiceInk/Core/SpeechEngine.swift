@@ -45,8 +45,8 @@ final class SpeechEngine {
     private var aggregated: String = ""
 
     static func requestAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
-        await withCheckedContinuation { cont in
-            SFSpeechRecognizer.requestAuthorization { status in
+        await withCheckedContinuation { (cont: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
+            SFSpeechRecognizer.requestAuthorization { @Sendable status in
                 cont.resume(returning: status)
             }
         }

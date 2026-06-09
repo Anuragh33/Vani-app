@@ -34,9 +34,6 @@ struct SettingsView: View {
                 }
                 Toggle("AI polish (Foundation Models)", isOn: $settings.polishEnabled)
                 Toggle("Auto-detect context from frontmost app", isOn: $settings.autoContext)
-                Stepper(value: $settings.historyLimit, in: 5...100, step: 5) {
-                    Text("History limit: \(settings.historyLimit)")
-                }
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
             }
 
