@@ -60,13 +60,68 @@ Every step runs entirely on your Mac using Apple's frameworks introduced in macO
 
 ## Install
 
-1. **[Download Vani-0.1.2.dmg](https://github.com/Anuragh33/Vani/releases/latest)**
-2. Open the DMG, drag **Vani** into **Applications**
-3. Double-click **Install Vani.command** inside the DMG and click **Open**
-4. Grant Microphone, Speech Recognition, and Accessibility permissions when prompted
-5. Hold **Fn** to dictate
+### Step 1 — Download
 
-> The install script removes a Gatekeeper flag that blocks unsigned apps downloaded from the internet. It runs one command: `xattr -dr com.apple.quarantine /Applications/Vani.app`
+**[Download Vani-0.1.2.dmg](https://github.com/Anuragh33/Vani/releases/latest)** from the Releases page.
+
+---
+
+### Step 2 — Open the DMG
+
+Double-click the downloaded `Vani-0.1.2.dmg` file. A window will appear with:
+- `Vani.app`
+- An `Applications` folder shortcut
+- `Install Vani.command`
+
+---
+
+### Step 3 — Drag to Applications
+
+Drag **Vani.app** into the **Applications** folder shortcut inside the DMG.
+
+---
+
+### Step 4 — Run the install script
+
+Because Vani is not notarized (that requires a paid Apple Developer account), macOS will show a **"damaged and can't be opened"** error if you try to open the app directly. The install script fixes this in one click.
+
+1. Double-click **Install Vani.command** inside the DMG
+2. macOS will ask if you're sure — click **Open**
+3. A Terminal window opens, runs the fix, and launches Vani automatically
+
+> **What the script does:** it runs `xattr -dr com.apple.quarantine /Applications/Vani.app` — this removes the internet quarantine flag macOS applies to downloaded files. It does nothing else.
+
+If you'd rather do it manually, open Terminal and run:
+```sh
+xattr -dr com.apple.quarantine /Applications/Vani.app
+```
+
+---
+
+### Step 5 — Grant permissions
+
+On first launch, macOS will ask for three permissions. All three are required:
+
+| Permission | Why |
+|---|---|
+| **Microphone** | To record your voice while Fn is held |
+| **Speech Recognition** | To transcribe your speech on-device |
+| **Accessibility** | To type the transcribed text into other apps |
+
+If you accidentally deny any of them, go to **System Settings → Privacy & Security** and enable them manually for Vani.
+
+---
+
+### Step 6 — Start dictating
+
+Vani lives in your **menu bar** (look for the mic icon). There is no Dock icon.
+
+1. Click the **mic icon** in the menu bar to open the popover
+2. Hold **Fn** anywhere on your Mac to start recording
+3. Speak naturally
+4. Release **Fn** — Vani transcribes and injects the polished text into whatever app is focused
+
+> **Tip:** Go to **System Settings → Keyboard** and set "Press Fn key to" → **Do Nothing** so macOS doesn't intercept the Fn key before Vani does.
 
 ---
 
