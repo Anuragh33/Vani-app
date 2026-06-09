@@ -1,63 +1,100 @@
 # Vani
 
-Privacy-first macOS Wispr Flow clone. Hold a hotkey, speak, polished text appears in the focused app. 100% on-device using Apple's `SpeechAnalyzer` + Foundation Models.
+**Hold Fn. Speak. Done.**
 
-Requires macOS 26 (Tahoe) and Apple Silicon.
+Vani is a privacy-first macOS dictation app. Hold the Fn key anywhere on your Mac, speak naturally, and polished text appears instantly in whatever app you're using — Terminal, Chrome, Slack, Xcode, anywhere.
 
-## Generate the Xcode project
+Zero servers. Zero API costs. Everything runs on your Mac.
+
+---
+
+## How it works
+
+```
+Hold Fn → mic records → SpeechAnalyzer transcribes → Foundation Models polishes → text injected
+```
+
+All four steps happen entirely on-device using Apple's frameworks introduced in macOS 26.
+
+---
+
+## Download
+
+**[→ Download Vani 0.1.1](https://github.com/Anuragh33/Vani/releases/latest)**
+
+Requires macOS 26 (Tahoe) or later · Apple Silicon only
+
+### First launch
+
+macOS will block the app because it isn't notarized. To open it:
+
+1. Drag **Vani.app** into **Applications**
+2. Open **Terminal** and run:
+```sh
+xattr -dr com.apple.quarantine /Applications/Vani.app
+```
+3. Double-click Vani — grant Microphone, Speech Recognition, and Accessibility when prompted
+
+---
+
+## Features
+
+- **Hold Fn to dictate** — release to inject. Works in every app that accepts ⌘V
+- **On-device STT** — `SpeechAnalyzer` (macOS 26), Whisper-class accuracy, no internet needed
+- **AI text polish** — Apple's `FoundationModels` cleans filler words, fixes grammar, matches tone
+- **Context-aware** — auto-detects Mail, Slack, Xcode, Terminal and adjusts polish style
+- **Custom vocabulary** — bias recognition toward names, jargon, acronyms you use
+- **Multilingual** — pick any locale supported by Apple's speech models
+- **Animated pill overlay** — minimal waveform indicator with target app icon while recording
+- **iCloud settings sync** — hotkey, context, vocabulary roam across your Macs
+- **Launch at login** — always ready, lives in your menu bar
+
+---
+
+## Requirements
+
+| | |
+|---|---|
+| macOS | 26 (Tahoe) or later |
+| Chip | Apple Silicon (M-series) |
+| Xcode | 26 (to build from source) |
+
+---
+
+## Build from source
 
 ```sh
-brew install xcodegen      # one-time
-cd ~/Developer/Vani
+brew install xcodegen
+git clone https://github.com/Anuragh33/Vani.git
+cd Vani
 xcodegen generate
 open Vani.xcodeproj
 ```
 
-In Xcode 26:
-1. Select the `Vani` target → Signing & Capabilities → set your Team (free Apple ID is fine).
-2. Build & Run (⌘R).
-3. On first launch, grant Microphone, Speech Recognition, and Accessibility permissions when prompted.
+Set your signing Team in Xcode → ⌘R.
 
-## Project layout
+---
 
-```
-Vani/
-├── VaniApp.swift           App entry (LSUIElement = YES)
-├── AppDelegate.swift           Wires hotkey → session → menu bar → overlay
-├── Core/
-│   ├── HotkeyManager.swift     CGEventTap, right-option-hold default
-│   ├── AudioRecorder.swift     AVAudioEngine tap + RMS level
-│   ├── SpeechEngine.swift      SpeechAnalyzer + SpeechTranscriber (macOS 26)
-│   ├── TextPolisher.swift      FoundationModels LanguageModelSession
-│   ├── TextInjector.swift      AXUIElement, clipboard+Cmd-V fallback
-│   └── DictationSession.swift  State machine for the pipeline
-├── UI/
-│   ├── MenuBarController.swift NSStatusItem + NSPopover
-│   ├── StatusPopoverView.swift Recent history + quick toggles
-│   ├── SettingsView.swift      Settings scene
-│   └── RecordingOverlay.swift  Floating pill NSPanel
-├── Models/                     Settings, history entry, state enum
-├── Utilities/                  Accessibility permission helpers
-└── Resources/                  Info.plist, entitlements
-```
+## Privacy
 
-## Verification checklist (Phase 1 → Phase 4 from the spec)
+- No data ever leaves your Mac
+- No analytics, no tracking, no accounts
+- Dictation history lives only in memory and is cleared on quit
 
-1. App launches with no Dock icon, mic in menu bar.
-2. Press Right Option → console log fires (add a print in `HotkeyManager.handle` if needed).
-3. Speak for 5s in TextEdit → polished text appears.
-4. Toggle "AI polish" off → raw transcript still appears.
-5. Frontmost-app switch during recording → text injects into the app that was focused at press time.
+---
 
-## API notes
+## Tech stack
 
-`SpeechAnalyzer` and `FoundationModels` are macOS 26 SDK APIs. This project uses the verified
-signatures from `Speech.framework/.swiftinterface` and `FoundationModels.framework/.swiftinterface`
-shipped with the Command Line Tools for macOS 26.5. If Apple revises the API in a later SDK,
-adjust `SpeechEngine.swift` and `TextPolisher.swift`.
+| Layer | Technology |
+|---|---|
+| Language | Swift 6 |
+| UI | SwiftUI + AppKit |
+| Speech-to-text | `Speech` framework — `SpeechAnalyzer` + `SpeechTranscriber` |
+| AI text polish | `FoundationModels` — `SystemLanguageModel` |
+| Text injection | Accessibility API + clipboard + ⌘V fallback |
+| Hotkey | `CGEventTap` via CoreGraphics |
+| Audio | `AVAudioEngine` + Accelerate FFT |
 
-## Known gaps
+---
 
-- Custom hotkey capture UI is not implemented (defaults to Right Option).
-- `launchAtLogin` toggle persists but is not wired to `SMAppService` yet.
-- No FFT-based waveform; the overlay shows a pulsing dot instead.
+Made by [Anurag](https://github.com/Anuragh33)
