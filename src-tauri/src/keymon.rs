@@ -128,6 +128,7 @@ pub fn position_overlay(app: &AppHandle, w: &tauri::WebviewWindow) {
         let bot_y = (origin.y + sh - win_h - (44.0 * scale) as i32).max(top_y);
 
         let (wx, wy) = match hud_position.as_str() {
+            "top-left" => (origin.x + pad_x, top_y),
             "bottom-center" => (origin.x + (sw - win_w) / 2, bot_y),
             "top-right" => (origin.x + (sw - win_w - pad_x).max(pad_x), top_y),
             _ => (origin.x + (sw - win_w) / 2, top_y),

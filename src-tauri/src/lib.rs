@@ -32,18 +32,43 @@ fn get_dashboard(app: &AppHandle) -> Option<tauri::WebviewWindow> {
     app.get_webview_window("dashboard")
 }
 
+fn set_dock_visible(app: &AppHandle, visible: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        let policy = if visible {
+            tauri::ActivationPolicy::Regular
+        } else {
+            tauri::ActivationPolicy::Accessory
+        };
+        let _ = app.set_activation_policy(policy);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, visible);
+    }
+}
+
 fn show_dashboard(app: &AppHandle, section: &str) {
+    set_dock_visible(app, true);
     if let Some(w) = get_dashboard(app) {
         let _ = w.show();
+        let _ = w.unminimize();
         let _ = w.set_focus();
         let _ = w.emit("open-dashboard-section", section);
     }
 }
 
+fn hide_dashboard(app: &AppHandle) {
+    if let Some(w) = get_dashboard(app) {
+        let _ = w.hide();
+    }
+    set_dock_visible(app, false);
+}
+
 fn toggle_dashboard(app: &AppHandle) {
     if let Some(w) = get_dashboard(app) {
         if w.is_visible().unwrap_or(false) {
-            let _ = w.hide();
+            hide_dashboard(app);
         } else {
             show_dashboard(app, "overview");
         }
@@ -75,7 +100,7 @@ fn toggle_overlay(app: &AppHandle) {
 
 fn setup_tray(app: &mut App, initial_style: &str) -> tauri::Result<()> {
     let dictate_item = MenuItem::with_id(app, "dictate", "Start / Stop Dictation", true, None::<&str>)?;
-    let dashboard_item = MenuItem::with_id(app, "dashboard", "Open Voice Studio", true, None::<&str>)?;
+    let dashboard_item = MenuItem::with_id(app, "dashboard", "Open VANI Studio", true, None::<&str>)?;
     let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit VANI", true, None::<&str>)?;
 
@@ -93,7 +118,7 @@ fn setup_tray(app: &mut App, initial_style: &str) -> tauri::Result<()> {
                 let app_bg = app.clone();
                 std::thread::spawn(move || keymon::toggle_overlay_dictation(&app_bg));
             }
-            "dashboard" => toggle_dashboard(app),
+            "dashboard" => show_dashboard(app, "overview"),
             "settings" => show_dashboard(app, "settings"),
             "quit" => app.exit(0),
             _ => {}
@@ -194,8 +219,17 @@ pub fn run() {
             // Start native Option-key monitor for hold-to-record
             keymon::start_option_key_monitor(app.handle().clone());
 
-            // In dev mode, show dashboard and open DevTools
-            #[cfg(debug_assertions)]
+            // Open VANI Studio on launch, and intercept window close so VANI
+            // keeps running cleanly in the menu bar with its Dock icon hidden.
+            if let Some(dash) = get_dashboard(app.handle()) {
+                let app_handle = app.handle().clone();
+                dash.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        hide_dashboard(&app_handle);
+                    }
+                });
+            }
             show_dashboard(app.handle(), "overview");
 
             Ok(())
@@ -235,6 +269,14 @@ pub fn run() {
             toggle_dashboard_cmd,
             open_main_window,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                show_dashboard(app_handle, "overview");
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app_handle, event);
+        });
 }

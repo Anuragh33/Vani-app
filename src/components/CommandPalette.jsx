@@ -38,7 +38,7 @@ export default function CommandPalette({
 
   const commands = useMemo(
     () => [
-      { id: "nav-home", group: "Navigate", label: "Voice Studio", hint: "⌘1", icon: Mic, run: () => onNavigate("home") },
+      { id: "nav-home", group: "Navigate", label: "VANI Studio", hint: "⌘1", icon: Mic, run: () => onNavigate("home") },
       { id: "nav-history", group: "Navigate", label: "Transcription History", hint: "⌘2", icon: History, run: () => onNavigate("history") },
       { id: "nav-notes", group: "Navigate", label: "Voice Notes", hint: "⌘3", icon: FileText, run: () => onNavigate("notes") },
       { id: "nav-hud", group: "Navigate", label: "HUD & Menu Bar Preview", hint: "⌘4", icon: PanelTop, run: () => onNavigate("hud") },

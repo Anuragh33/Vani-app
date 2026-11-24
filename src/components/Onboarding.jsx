@@ -393,7 +393,7 @@ function DoneStep({ onFinish }) {
         </p>
       </div>
       <button type="button" onClick={onFinish} className="vani-btn-primary rounded-xl px-6 py-2.5 text-sm font-semibold">
-        Open Voice Studio
+        Open VANI Studio
       </button>
     </div>
   );

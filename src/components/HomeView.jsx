@@ -243,7 +243,7 @@ export default function HomeView({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Voice Studio</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">VANI Studio</h1>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
                 settings.transcriptionProvider === "apple" ||

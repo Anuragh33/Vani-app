@@ -14,6 +14,7 @@ import {
   ExternalLink,
   PanelTop,
   PanelBottom,
+  CornerUpLeft,
   CornerUpRight,
 } from "lucide-react";
 import { FloatingHudPill, BottomHudPill } from "../Overlay";
@@ -56,9 +57,10 @@ const HUD_STYLES = [
 ];
 
 const HUD_POSITIONS = [
+  { id: "top-left", label: "Top Left", icon: CornerUpLeft },
   { id: "top-center", label: "Top Center", icon: PanelTop },
-  { id: "bottom-center", label: "Bottom Center", icon: PanelBottom },
   { id: "top-right", label: "Top Right", icon: CornerUpRight },
+  { id: "bottom-center", label: "Bottom Center", icon: PanelBottom },
 ];
 
 const TRAY_STYLES = [
@@ -176,7 +178,9 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
   };
 
   const hudPositionClass =
-    hudPosition === "bottom-center"
+    hudPosition === "top-left"
+      ? "top-11 left-5"
+      : hudPosition === "bottom-center"
       ? "bottom-6 left-1/2 -translate-x-1/2"
       : hudPosition === "top-right"
       ? "top-11 right-5"
@@ -430,7 +434,7 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
               >
                 <span className="flex items-center gap-2">
                   <LayoutDashboard className={`h-3.5 w-3.5 ${wallpaper.isLightBar ? "text-zinc-500" : "text-white/60"}`} />
-                  Dashboard
+                  Open VANI Studio
                 </span>
                 <span className={`font-mono text-[10px] ${wallpaper.isLightBar ? "text-zinc-400" : "text-white/45"}`}>⌘⇧D</span>
               </button>
@@ -570,7 +574,7 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
           {/* Screen Position */}
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Screen Position</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {HUD_POSITIONS.map((pos) => {
                 const Icon = pos.icon;
                 const active = hudPosition === pos.id;

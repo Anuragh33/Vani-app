@@ -61,7 +61,7 @@ const defaultSettings = {
 };
 
 const PRIMARY_NAV = [
-  { key: "home", label: "Voice Studio", icon: Mic, shortcut: "⌘1" },
+  { key: "home", label: "VANI Studio", icon: Mic, shortcut: "⌘1" },
   { key: "history", label: "History", icon: History, shortcut: "⌘2" },
   { key: "notes", label: "Voice Notes", icon: FileText, shortcut: "⌘3" },
 ];
