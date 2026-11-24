@@ -90,14 +90,32 @@ function simulateTransform(input, settings) {
   return out;
 }
 
-export default function ModesView({ settings, onSaveSettings, onNotify }) {
+export default function ModesView({ settings, appleAi, onSaveSettings, onNotify }) {
   const activeModeId = settings.cleanupContext || "general";
   const activeMode = MODES.find((m) => m.id === activeModeId) || MODES[0];
   const [sandboxText, setSandboxText] = useState(
     "um hey team uh let's book a review using cal and ship the VANI update today"
   );
+  const [appleTestOut, setAppleTestOut] = useState("");
+  const [appleTesting, setAppleTesting] = useState(false);
 
   const transformed = useMemo(() => simulateTransform(sandboxText, settings), [sandboxText, settings]);
+
+  const runLiveApplePolish = async () => {
+    if (!sandboxText.trim()) return;
+    setAppleTesting(true);
+    try {
+      const res = await window.vani?.testApplePolish?.(sandboxText, activeModeId);
+      if (res?.ok && res.text) {
+        setAppleTestOut(res.text);
+        onNotify?.("Polished with Apple Foundation Model on-device");
+      } else {
+        onNotify?.(res?.error || "Apple Foundation Model unavailable", "error");
+      }
+    } finally {
+      setAppleTesting(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -113,13 +131,14 @@ export default function ModesView({ settings, onSaveSettings, onNotify }) {
           <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--brand)]" />
           <span className="text-[var(--muted)]">Cleanup Engine:</span>
           <select
-            value={settings.cleanupProvider || "none"}
+            value={settings.cleanupProvider || "apple"}
             onChange={(e) => {
               onSaveSettings({ cleanupProvider: e.target.value });
-              onNotify?.("Updated cleanup provider");
+              onNotify?.("Updated cleanup engine");
             }}
             className="bg-transparent font-semibold text-[var(--text)] outline-none cursor-pointer"
           >
+            <option value="apple">Apple Foundation Model (On-Device)</option>
             <option value="none">Local Rules Only</option>
             <option value="anthropic">Anthropic Claude (BYOK)</option>
             <option value="openai">OpenAI GPT-4o mini (BYOK)</option>
@@ -199,8 +218,8 @@ export default function ModesView({ settings, onSaveSettings, onNotify }) {
               },
               {
                 key: "privacyMode",
-                title: "Privacy Shield (Local Only)",
-                desc: "Block all cloud cleanup APIs & skip saving history.",
+                title: "Privacy Shield (100% On-Device)",
+                desc: "Block all cloud APIs & skip history. Apple Foundation Model stays active locally.",
               },
             ].map((item) => (
               <div
@@ -265,11 +284,24 @@ export default function ModesView({ settings, onSaveSettings, onNotify }) {
               </div>
 
               <div className="rounded-xl border border-[var(--brand)]/30 bg-[var(--bg-app)] p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--brand)]">
-                  Transformed Output
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--brand)]">
+                    {appleTestOut ? "Apple Foundation Model Output" : "Local Preview Output"}
+                  </p>
+                  {appleAi?.foundationModelAvailable && (
+                    <button
+                      type="button"
+                      onClick={runLiveApplePolish}
+                      disabled={appleTesting}
+                      className="inline-flex items-center gap-1 rounded-lg bg-[var(--violet-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--violet)] transition hover:brightness-110 disabled:opacity-50"
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      {appleTesting ? "Polishing on-device…" : "Test Apple LLM"}
+                    </button>
+                  )}
+                </div>
                 <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-[var(--text)]">
-                  {transformed || <span className="italic text-[var(--muted)]">Type something above to preview…</span>}
+                  {appleTestOut || transformed || <span className="italic text-[var(--muted)]">Type something above to preview…</span>}
                 </p>
               </div>
             </div>

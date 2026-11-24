@@ -4,6 +4,8 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>VANI needs microphone access to transcribe your speech.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>VANI uses Apple on-device Speech Recognition when Apple Speech Engine is selected.</string>
   <key>NSAccessibilityUsageDescription</key>
   <string>VANI uses Accessibility to type transcribed text into other apps.</string>
   <key>NSAppleEventsUsageDescription</key>

@@ -42,7 +42,7 @@ pub struct Settings {
     pub anthropic_key: String,
     #[serde(default = "default_transcription_provider")]
     pub transcription_provider: String,
-    #[serde(default = "default_none")]
+    #[serde(default = "default_cleanup_provider")]
     pub cleanup_provider: String,
     #[serde(default = "default_general")]
     pub cleanup_context: String,
@@ -73,8 +73,8 @@ fn default_silence_ms() -> u32 { 2000 }
 fn default_model() -> String { "ggml-base.en".into() }
 fn default_threads() -> u32 { (num_cpus().saturating_sub(1)).clamp(2, 8) }
 fn default_theme() -> String { "dark".into() }
-fn default_transcription_provider() -> String { "local".into() }
-fn default_none() -> String { "none".into() }
+fn default_transcription_provider() -> String { "apple".into() }
+fn default_cleanup_provider() -> String { "apple".into() }
 fn default_general() -> String { "general".into() }
 fn default_hud_style() -> String { "breathwave".into() }
 fn default_hud_position() -> String { "top-center".into() }

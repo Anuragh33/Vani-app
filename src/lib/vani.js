@@ -55,8 +55,8 @@ function createBrowserPreviewBridge() {
     theme: "dark",
     openaiKey: "",
     anthropicKey: "",
-    transcriptionProvider: "local",
-    cleanupProvider: "none",
+    transcriptionProvider: "apple",
+    cleanupProvider: "apple",
     cleanupContext: "general",
     fillerWordRemoval: true,
     onboardingComplete: true,
@@ -303,12 +303,25 @@ function createBrowserPreviewBridge() {
       const active = models.find((m) => m.id === settings.whisperModel);
       return {
         binaryFound: true,
-        binary: "built-in (whisper-rs)",
+        binary: "built-in (whisper-rs Metal + ONNX)",
         model: settings.whisperModel,
         modelInstalled: Boolean(active?.installed),
         modelPath: `~/Library/Application Support/com.vani.app/models/${settings.whisperModel}.bin`,
         modelsDir: `~/Library/Application Support/com.vani.app/models`,
       };
+    },
+    appleAiStatus: async () => ({
+      foundationModelAvailable: true,
+      foundationModelReason: "ready",
+      speechAnalyzerAvailable: true,
+      macosVersion: "27.2",
+      helperFound: true,
+    }),
+    testApplePolish: async (text, context = "general") => {
+      await new Promise((r) => setTimeout(r, 320));
+      let out = applyLocalPipeline(text);
+      if (out && !/[.!?]$/.test(out)) out += ".";
+      return { ok: true, text: out, context };
     },
     openModelsDir: async () => {},
     importParakeetModel: async (_srcPath, modelId) => {
@@ -376,8 +389,10 @@ const tauriBridge = {
   onModelDownloadProgress: (cb) => subscribe("model-download-progress", cb),
   onModelDownloadDone: (cb) => subscribe("model-download-done", cb),
 
-  // Whisper status
+  // Whisper & Apple on-device AI status
   whisperStatus: () => invoke("whisper_status"),
+  appleAiStatus: () => invoke("apple_ai_status"),
+  testApplePolish: (text, context = "general") => invoke("test_apple_polish", { text, context }),
   openModelsDir: () => invoke("open_models_dir"),
   importParakeetModel: (srcPath, modelId) => invoke("import_parakeet_model", { srcPath, modelId }),
 

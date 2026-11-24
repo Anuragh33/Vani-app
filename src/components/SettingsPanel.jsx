@@ -189,6 +189,7 @@ export default function SettingsPanel({
   onChange,
   models,
   whisperStatus,
+  appleAi,
   permissions,
   onRecheckPermissions,
   onOpenModelsDir,
@@ -244,20 +245,21 @@ export default function SettingsPanel({
               </div>
 
               <SettingRow
-                title="Inference Provider"
-                desc="Local runs 100% offline on your Mac. Cloud uses OpenAI Whisper API."
+                title="Speech-to-Text Engine"
+                desc="Pick Apple’s zero-download on-device SpeechAnalyzer, open-source Whisper/Parakeet, or Cloud."
               >
                 <div className="flex rounded-xl border border-[var(--border)] bg-[var(--bg-app)] p-0.5">
                   {[
-                    ["local", "Local (Built-in)"],
+                    ["apple", "Apple On-Device"],
+                    ["local", "Whisper / Parakeet"],
                     ["openai", "OpenAI Cloud"],
                   ].map(([val, label]) => (
                     <button
                       key={val}
                       type="button"
                       onClick={() => onChange({ transcriptionProvider: val })}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                        (settings.transcriptionProvider || "local") === val
+                      className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                        (settings.transcriptionProvider || "apple") === val
                           ? "bg-[var(--brand-soft)] text-[var(--brand)]"
                           : "text-[var(--muted)] hover:text-[var(--text)]"
                       }`}
@@ -268,7 +270,7 @@ export default function SettingsPanel({
                 </div>
               </SettingRow>
 
-              {(settings.transcriptionProvider || "local") === "local" && (
+              {(settings.transcriptionProvider || "apple") === "local" && (
                 <>
                   <SettingRow
                     title="Active Speech Model"
@@ -424,16 +426,17 @@ export default function SettingsPanel({
 
               <SettingRow
                 title="AI Text Cleanup Provider"
-                desc="Polish grammar, punctuation, and tone using your active Mode."
+                desc="Apple Foundation Model runs 100% on-device with zero API keys. Cloud BYOK is optional."
               >
                 <select
-                  value={settings.cleanupProvider || "none"}
+                  value={settings.cleanupProvider || "apple"}
                   onChange={(e) => onChange({ cleanupProvider: e.target.value })}
-                  className="vani-input w-52 text-xs"
+                  className="vani-input w-56 text-xs"
                 >
-                  <option value="none">None (Local only)</option>
-                  <option value="anthropic">Anthropic Claude</option>
-                  <option value="openai">OpenAI GPT-4o mini</option>
+                  <option value="apple">Apple Foundation Model (On-Device)</option>
+                  <option value="none">Local Rules Only</option>
+                  <option value="anthropic">Anthropic Claude (BYOK)</option>
+                  <option value="openai">OpenAI GPT-4o mini (BYOK)</option>
                 </select>
               </SettingRow>
 
@@ -502,10 +505,36 @@ export default function SettingsPanel({
                   </p>
                 </div>
 
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
+                  <p className="text-xs font-semibold text-[var(--muted)]">Apple Foundation Model (LLM)</p>
+                  <p
+                    className={`mt-1.5 text-sm font-semibold ${
+                      appleAi?.foundationModelAvailable ? "text-[var(--emerald)]" : "text-[var(--amber)]"
+                    }`}
+                  >
+                    {appleAi?.foundationModelAvailable
+                      ? "Available On-Device"
+                      : appleAi?.foundationModelReason || "Unavailable"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
+                  <p className="text-xs font-semibold text-[var(--muted)]">Apple SpeechAnalyzer</p>
+                  <p
+                    className={`mt-1.5 text-sm font-semibold ${
+                      appleAi?.speechAnalyzerAvailable ? "text-[var(--emerald)]" : "text-[var(--amber)]"
+                    }`}
+                  >
+                    {appleAi?.speechAnalyzerAvailable
+                      ? `Ready (macOS ${appleAi.macosVersion})`
+                      : "Requires macOS 26+"}
+                  </p>
+                </div>
+
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 sm:col-span-2">
-                  <p className="text-xs font-semibold text-[var(--muted)]">Built-in Speech Engine</p>
+                  <p className="text-xs font-semibold text-[var(--muted)]">Open-Source Speech Engines</p>
                   <p className="mt-1 font-mono text-xs text-[var(--emerald)]">
-                    whisper-rs + ONNX Runtime (compiled natively into VANI)
+                    whisper-rs (Apple Silicon Metal GPU) + NVIDIA Parakeet ONNX Runtime
                   </p>
                 </div>
 
@@ -546,15 +575,29 @@ export default function SettingsPanel({
               <div className="flex items-center gap-3.5">
                 <VaniLogo size={46} />
                 <div>
-                  <h2 className="text-lg font-bold text-[var(--text)]">VANI v2.0</h2>
-                  <p className="text-xs text-[var(--muted)]">Voice-Activated Natural Intelligence for macOS</p>
+                  <h2 className="text-lg font-bold text-[var(--text)]">VANI v2.1</h2>
+                  <p className="text-xs text-[var(--muted)]">Hybrid Apple On-Device AI &amp; Open-Source Dictation for macOS</p>
                 </div>
               </div>
 
               <div className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4">
                 {[
-                  ["Transcription", settings.transcriptionProvider === "openai" ? "OpenAI Whisper API" : "Built-in whisper-rs / Parakeet ONNX"],
-                  ["Text Cleanup", settings.cleanupProvider === "none" ? "Local rules only" : settings.cleanupProvider],
+                  [
+                    "Transcription",
+                    settings.transcriptionProvider === "apple"
+                      ? "Apple On-Device SpeechAnalyzer"
+                      : settings.transcriptionProvider === "openai"
+                      ? "OpenAI Whisper API"
+                      : "whisper-rs (Metal GPU) / Parakeet ONNX",
+                  ],
+                  [
+                    "Text Cleanup",
+                    settings.cleanupProvider === "apple"
+                      ? "Apple Foundation Model (On-Device LLM)"
+                      : settings.cleanupProvider === "none"
+                      ? "Local rules only"
+                      : settings.cleanupProvider,
+                  ],
                   ["Privacy Status", settings.privacyMode ? "Privacy Shield Active (Zero Cloud)" : "Local-first"],
                   ["Storage", "Local JSON in macOS Application Support"],
                   ["Global Trigger", "Hold ⌥ Option · Dashboard ⌘⇧D"],

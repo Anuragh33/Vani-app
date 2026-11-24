@@ -124,6 +124,7 @@ export default function HomeView({
   onSaveSettings,
   permissions,
   whisperStatus,
+  appleAi,
   models,
   history,
   onNavigate,
@@ -241,13 +242,17 @@ export default function HomeView({
             <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Voice Studio</h1>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-                whisperStatus?.modelInstalled || settings.transcriptionProvider === "openai"
+                settings.transcriptionProvider === "apple" ||
+                whisperStatus?.modelInstalled ||
+                settings.transcriptionProvider === "openai"
                   ? "bg-[var(--emerald-soft)] text-[var(--emerald)]"
                   : "bg-[var(--amber-soft)] text-[var(--amber)]"
               }`}
             >
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
-              {settings.transcriptionProvider === "openai"
+              {settings.transcriptionProvider === "apple"
+                ? "Ready · Apple SpeechAnalyzer"
+                : settings.transcriptionProvider === "openai"
                 ? "Cloud Whisper"
                 : whisperStatus?.modelInstalled
                 ? `Ready · ${activeModelObj?.name || settings.whisperModel}`
@@ -288,8 +293,8 @@ export default function HomeView({
         </div>
       </div>
 
-      {/* Warning banner if local model missing */}
-      {settings.transcriptionProvider !== "openai" && !whisperStatus?.modelInstalled && (
+      {/* Warning banner if local open-source model missing */}
+      {settings.transcriptionProvider === "local" && !whisperStatus?.modelInstalled && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/35 bg-[var(--amber-soft)] px-4 py-3">
           <div className="flex items-center gap-2.5 text-sm text-[var(--amber)]">
             <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -424,7 +429,11 @@ export default function HomeView({
           {/* Pipeline chips */}
           <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1 text-[11px] text-[var(--muted)]">
             <span className="rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-0.5">
-              {settings.transcriptionProvider === "openai" ? "OpenAI Whisper" : `whisper-rs · ${settings.whisperModel}`}
+              {settings.transcriptionProvider === "apple"
+                ? "Apple SpeechAnalyzer"
+                : settings.transcriptionProvider === "openai"
+                ? "OpenAI Whisper"
+                : `Metal · ${settings.whisperModel}`}
             </span>
             <ArrowRight className="h-3 w-3 opacity-50" />
             <span
@@ -441,8 +450,19 @@ export default function HomeView({
               Snippets: {(settings.snippets || []).length}
             </span>
             <ArrowRight className="h-3 w-3 opacity-50" />
-            <span className="rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-0.5">
-              Cleanup: {settings.cleanupProvider === "none" ? "Local" : settings.cleanupProvider}
+            <span
+              className={`rounded-md border px-2 py-0.5 ${
+                settings.cleanupProvider === "apple" && appleAi?.foundationModelAvailable
+                  ? "border-[var(--violet)]/35 bg-[var(--violet-soft)] text-[var(--violet)]"
+                  : "border-[var(--border)] bg-[var(--bg-surface)]"
+              }`}
+            >
+              Polish:{" "}
+              {settings.cleanupProvider === "apple"
+                ? "Apple Foundation Model"
+                : settings.cleanupProvider === "none"
+                ? "Local Rules"
+                : settings.cleanupProvider}
             </span>
           </div>
         </div>

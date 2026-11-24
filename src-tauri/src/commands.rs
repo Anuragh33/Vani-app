@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 
+use crate::apple_ai;
 use crate::cleanup;
 use crate::config::{HistoryEntry, Note, Settings, Store};
 use crate::models;
@@ -84,7 +85,7 @@ pub async fn save_settings(
 #[tauri::command]
 pub async fn dictation_complete(
     state: State<'_, AppState>,
-    _app: AppHandle,
+    app: AppHandle,
     wav_buffer: Vec<u8>,
 ) -> Result<serde_json::Value, String> {
     {
@@ -98,7 +99,7 @@ pub async fn dictation_complete(
     };
     let privacy_mode = settings.privacy_mode;
 
-    // 1. Transcription
+    // 1. Transcription (Apple On-Device SpeechAnalyzer | Open-Source Local Whisper/Parakeet | OpenAI Cloud)
     let (raw_text, used_fallback, provider_label) = {
         let use_cloud = settings.transcription_provider == "openai"
             && !settings.openai_key.is_empty()
@@ -109,13 +110,50 @@ pub async fn dictation_complete(
                 .await
                 .map_err(|e| e.to_string())?;
             (text, false, "openai:whisper-1".to_string())
+        } else if settings.transcription_provider == "apple" {
+            match apple_ai::transcribe_wav_on_device(
+                &app,
+                &wav_buffer,
+                &settings.language,
+                &settings.custom_vocabulary,
+            )
+            .await
+            {
+                Ok(text) => (text, false, "apple:speech-analyzer".to_string()),
+                Err(apple_err) => {
+                    // Graceful fallback to installed open-source local model if Apple STT fails
+                    let model_path = models::model_path(&state.app_data_dir, &settings.whisper_model);
+                    if models::model_installed(&state.app_data_dir, &settings.whisper_model) {
+                        transcribe::ensure_engine(&state.engine, &model_path, &settings.whisper_model)
+                            .map_err(|e| e.to_string())?;
+                        let samples = transcribe::wav_to_samples(&wav_buffer).map_err(|e| e.to_string())?;
+                        let engine_guard = state.engine.lock().map_err(|e| e.to_string())?;
+                        let engine = engine_guard.as_ref().ok_or("Engine not loaded")?;
+                        let text = engine
+                            .transcribe(
+                                &samples,
+                                &settings.language,
+                                settings.threads,
+                                settings.translate,
+                                &settings.custom_vocabulary,
+                            )
+                            .map_err(|e| e.to_string())?;
+                        (text, true, format!("apple->whisper-rs:{}", settings.whisper_model))
+                    } else {
+                        return Ok(serde_json::json!({
+                            "ok": false,
+                            "error": format!("Apple Speech failed ({}). Switch to an open-source model in Models or grant Speech Recognition permission.", apple_err)
+                        }));
+                    }
+                }
+            }
         } else {
-            // Local: ensure engine is loaded
+            // Open-source local: whisper-rs (Metal GPU) or Parakeet ONNX
             let model_path = models::model_path(&state.app_data_dir, &settings.whisper_model);
             if !models::model_installed(&state.app_data_dir, &settings.whisper_model) {
                 return Ok(serde_json::json!({
                     "ok": false,
-                    "error": format!("Model {} is not downloaded. Open Models and download it.", settings.whisper_model)
+                    "error": format!("Model {} is not downloaded. Open Speech Models and download it, or switch to Apple On-Device Speech.", settings.whisper_model)
                 }));
             }
 
@@ -138,11 +176,15 @@ pub async fn dictation_complete(
 
             match result {
                 Ok(text) => {
-                    let label = format!("whisper-rs:{}", settings.whisper_model);
+                    let prefix = if models::is_parakeet(&settings.whisper_model) {
+                        "parakeet-onnx"
+                    } else {
+                        "whisper-rs-metal"
+                    };
+                    let label = format!("{}:{}", prefix, settings.whisper_model);
                     (text, false, label)
                 }
                 Err(local_err) => {
-                    // Auto-fallback to cloud if key configured and not privacy mode
                     if !settings.openai_key.is_empty() && !privacy_mode {
                         let text = cleanup::transcribe_with_openai(
                             &wav_buffer,
@@ -151,7 +193,7 @@ pub async fn dictation_complete(
                         )
                         .await
                         .map_err(|e| e.to_string())?;
-                        (text, true, format!("whisper-rs->openai:whisper-1"))
+                        (text, true, "whisper-rs->openai:whisper-1".to_string())
                     } else {
                         return Err(local_err.to_string());
                     }
@@ -176,16 +218,24 @@ pub async fn dictation_complete(
         raw_text.clone()
     };
 
-    // 4. AI cleanup (skipped in privacy mode)
-    if !privacy_mode {
-        let ctx = settings.cleanup_context.as_str();
+    // 4. AI cleanup: Apple Foundation Models runs 100% on-device (allowed even in Privacy Shield mode!)
+    let ctx = settings.cleanup_context.as_str();
+    let mut cleanup_used = "local-rules";
+    if settings.cleanup_provider == "apple" {
+        if let Ok(out) = apple_ai::polish_on_device(&app, &cleaned, ctx).await {
+            cleaned = out;
+            cleanup_used = "apple-foundation-model";
+        }
+    } else if !privacy_mode {
         if settings.cleanup_provider == "anthropic" && !settings.anthropic_key.is_empty() {
             if let Ok(out) = cleanup::cleanup_with_anthropic(&cleaned, ctx, &settings.anthropic_key).await {
                 cleaned = out;
+                cleanup_used = "anthropic";
             }
         } else if settings.cleanup_provider == "openai" && !settings.openai_key.is_empty() {
             if let Ok(out) = cleanup::cleanup_with_openai(&cleaned, ctx, &settings.openai_key).await {
                 cleaned = out;
+                cleanup_used = "openai";
             }
         }
     }
@@ -199,6 +249,7 @@ pub async fn dictation_complete(
         "text": cleaned,
         "rawText": raw_text,
         "providerLabel": provider_label,
+        "cleanupUsed": cleanup_used,
         "privacyMode": privacy_mode,
         "usedFallback": used_fallback
     }))
@@ -345,12 +396,30 @@ pub async fn whisper_status(state: State<'_, AppState>) -> Result<serde_json::Va
     let model_path = models::model_path(&state.app_data_dir, model_id);
     Ok(serde_json::json!({
         "binaryFound": true,
-        "binary": "built-in (whisper-rs)",
+        "binary": "built-in (whisper-rs Metal + ONNX)",
         "model": model_id,
         "modelInstalled": installed,
         "modelPath": model_path.to_string_lossy(),
         "modelsDir": models::models_dir(&state.app_data_dir).to_string_lossy()
     }))
+}
+
+#[tauri::command]
+pub async fn apple_ai_status(app: AppHandle) -> Result<apple_ai::AppleAiStatus, String> {
+    Ok(apple_ai::check_status(&app))
+}
+
+#[tauri::command]
+pub async fn test_apple_polish(
+    app: AppHandle,
+    text: String,
+    context: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let ctx = context.unwrap_or_else(|| "general".into());
+    match apple_ai::polish_on_device(&app, &text, &ctx).await {
+        Ok(cleaned) => Ok(serde_json::json!({ "ok": true, "text": cleaned })),
+        Err(e) => Ok(serde_json::json!({ "ok": false, "error": e.to_string() })),
+    }
 }
 
 #[tauri::command]

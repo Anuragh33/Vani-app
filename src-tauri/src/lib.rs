@@ -1,3 +1,4 @@
+mod apple_ai;
 mod cleanup;
 mod commands;
 mod config;
@@ -183,6 +184,8 @@ pub fn run() {
             commands::cancel_model_download,
             commands::delete_model,
             commands::whisper_status,
+            commands::apple_ai_status,
+            commands::test_apple_polish,
             commands::get_history,
             commands::clear_history,
             commands::list_notes,

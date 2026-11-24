@@ -57,18 +57,24 @@ export default function ModelsView({
   models,
   downloads,
   activeModel,
+  settings,
+  appleAi,
+  onSaveSettings,
   onDownload,
   onCancel,
   onDelete,
   onSetActive,
   onImport,
   onOpenModelsDir,
+  onNotify,
   error,
 }) {
   const [filter, setFilter] = useState("all"); // all | installed | whisper | parakeet | multilingual
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const installedModels = useMemo(() => (models || []).filter((m) => m.installed), [models]);
+  const usingAppleStt = settings?.transcriptionProvider === "apple";
+  const usingApplePolish = settings?.cleanupProvider === "apple";
 
   const filteredModels = useMemo(() => {
     return (models || []).filter((m) => {
@@ -84,9 +90,11 @@ export default function ModelsView({
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Local Speech Models</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">AI &amp; Speech Models</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Download once from Hugging Face and run 100% offline via built-in <code className="font-mono text-xs text-[var(--brand)]">whisper-rs</code> &amp; ONNX Runtime.
+            Use macOS’s built-in <strong>Apple On-Device AI</strong> with zero downloads — or run open-source{" "}
+            <code className="font-mono text-xs text-[var(--brand)]">Whisper (Metal GPU)</code> and{" "}
+            <code className="font-mono text-xs text-[var(--violet)]">NVIDIA Parakeet ONNX</code> locally.
           </p>
         </div>
 
@@ -100,26 +108,159 @@ export default function ModelsView({
         </button>
       </div>
 
-      {/* Summary Strip */}
+      {/* Built-in Apple On-Device AI Section */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand)]">
+            Apple On-Device AI · Built into macOS (Zero Downloads)
+          </p>
+          {appleAi?.macosVersion && (
+            <span className="font-mono text-[11px] text-[var(--muted)]">macOS {appleAi.macosVersion}</span>
+          )}
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {/* Apple SpeechAnalyzer Card */}
+          <div
+            className={`vani-card p-4 transition ${
+              usingAppleStt ? "border-[var(--brand)] shadow-[0_0_0_1px_var(--brand-ring)]" : ""
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-base font-bold text-[var(--brand)]">
+                  
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="text-sm font-semibold text-[var(--text)]">Apple SpeechAnalyzer</p>
+                    {usingAppleStt && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--emerald-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase text-[var(--emerald)]">
+                        <Check className="h-2.5 w-2.5" /> Active STT
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Zero-download on-device macOS speech recognition with Neural Engine acceleration.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3.5 flex items-center justify-between border-t border-[var(--border)] pt-3">
+              <span
+                className={`text-[11px] font-medium ${
+                  appleAi?.speechAnalyzerAvailable ? "text-[var(--emerald)]" : "text-[var(--amber)]"
+                }`}
+              >
+                {appleAi?.speechAnalyzerAvailable ? "Available on this Mac" : "Requires macOS 26+"}
+              </span>
+              {usingAppleStt ? (
+                <span className="text-xs font-semibold text-[var(--brand)]">Selected</span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!appleAi?.speechAnalyzerAvailable}
+                  onClick={() => {
+                    onSaveSettings?.({ transcriptionProvider: "apple" });
+                    onNotify?.("Switched Speech-to-Text to Apple On-Device SpeechAnalyzer");
+                  }}
+                  className="vani-btn-primary rounded-xl px-3 py-1.5 text-xs font-semibold"
+                >
+                  Use Apple Speech
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Apple FoundationModels Card */}
+          <div
+            className={`vani-card p-4 transition ${
+              usingApplePolish ? "border-[var(--violet)] shadow-[0_0_0_1px_rgba(167,139,250,0.3)]" : ""
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--violet-soft)] text-[var(--violet)]">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="text-sm font-semibold text-[var(--text)]">Apple Foundation Model</p>
+                    {usingApplePolish && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--emerald-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase text-[var(--emerald)]">
+                        <Check className="h-2.5 w-2.5" /> Active Polish
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    On-device Apple Intelligence LLM for Email, Slack, Notes &amp; Code cleanup — zero API keys.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3.5 flex items-center justify-between border-t border-[var(--border)] pt-3">
+              <span
+                className={`text-[11px] font-medium ${
+                  appleAi?.foundationModelAvailable ? "text-[var(--emerald)]" : "text-[var(--amber)]"
+                }`}
+              >
+                {appleAi?.foundationModelAvailable
+                  ? "Ready on this MacBook"
+                  : appleAi?.foundationModelReason || "Requires Apple Intelligence"}
+              </span>
+              {usingApplePolish ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSaveSettings?.({ cleanupProvider: "none" });
+                    onNotify?.("Switched text cleanup to Local Rules Only");
+                  }}
+                  className="vani-btn-secondary rounded-xl px-3 py-1.5 text-xs font-semibold"
+                >
+                  Disable
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!appleAi?.foundationModelAvailable}
+                  onClick={() => {
+                    onSaveSettings?.({ cleanupProvider: "apple" });
+                    onNotify?.("Enabled Apple Foundation Model on-device polish");
+                  }}
+                  className="vani-btn-primary rounded-xl px-3 py-1.5 text-xs font-semibold"
+                >
+                  Use Apple LLM
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Strip for Open-Source Models */}
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="vani-card p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Active Model</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Active Speech Engine</p>
           <p className="mt-1.5 truncate text-sm font-semibold text-[var(--text)]">
-            {(models || []).find((m) => m.id === activeModel)?.name || activeModel}
+            {usingAppleStt
+              ? "Apple SpeechAnalyzer"
+              : (models || []).find((m) => m.id === activeModel)?.name || activeModel}
           </p>
-          <p className="mt-0.5 font-mono text-[11px] text-[var(--brand)]">{activeModel}</p>
+          <p className="mt-0.5 font-mono text-[11px] text-[var(--brand)]">
+            {usingAppleStt ? "macOS On-Device" : activeModel}
+          </p>
         </div>
         <div className="vani-card p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Installed</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Open-Source Downloaded</p>
           <p className="mt-1.5 text-sm font-semibold text-[var(--text)]">
             {installedModels.length} of {(models || []).length} models
           </p>
-          <p className="mt-0.5 text-xs text-[var(--muted)]">Ready for offline dictation</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">Whisper GGML + Parakeet ONNX</p>
         </div>
         <div className="vani-card p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Runtime Engines</p>
-          <p className="mt-1.5 text-sm font-semibold text-[var(--emerald)]">whisper-rs + ONNX</p>
-          <p className="mt-0.5 text-xs text-[var(--muted)]">Built directly into VANI</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Acceleration</p>
+          <p className="mt-1.5 text-sm font-semibold text-[var(--emerald)]">Metal GPU + Neural Engine</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">100% local on Apple Silicon</p>
         </div>
       </div>
 
@@ -160,7 +301,7 @@ export default function ModelsView({
         {filteredModels.map((model) => {
           const dl = downloads?.[model.id];
           const progress = dl && dl.total ? Math.min(100, (dl.received / dl.total) * 100) : 0;
-          const isActive = activeModel === model.id;
+          const isActive = !usingAppleStt && activeModel === model.id;
           const isParakeet = model.backend === "parakeet";
           const meta = MODEL_META[model.id] || { speed: 3, accuracy: 3, note: "" };
 

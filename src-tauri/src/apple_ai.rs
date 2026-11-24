@@ -1,0 +1,154 @@
+use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
+use std::io::Write;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use tauri::{AppHandle, Manager};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppleAiStatus {
+    pub foundation_model_available: bool,
+    pub foundation_model_reason: String,
+    pub speech_analyzer_available: bool,
+    pub macos_version: String,
+    pub helper_found: bool,
+}
+
+impl Default for AppleAiStatus {
+    fn default() -> Self {
+        Self {
+            foundation_model_available: false,
+            foundation_model_reason: "Apple Intelligence helper not found".into(),
+            speech_analyzer_available: false,
+            macos_version: String::new(),
+            helper_found: false,
+        }
+    }
+}
+
+pub fn resolve_helper_path(app: &AppHandle) -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Ok(res_dir) = app.path().resource_dir() {
+        candidates.push(res_dir.join("bin").join("vani-apple-ai"));
+        candidates.push(res_dir.join("vani-apple-ai"));
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("vani-apple-ai"));
+            candidates.push(dir.join("../Resources/bin/vani-apple-ai"));
+            candidates.push(dir.join("../Resources/vani-apple-ai"));
+        }
+    }
+
+    // Dev fallback inside workspace
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("bin/vani-apple-ai"));
+
+    candidates.into_iter().find(|p| p.exists())
+}
+
+pub fn check_status(app: &AppHandle) -> AppleAiStatus {
+    let Some(bin) = resolve_helper_path(app) else {
+        return AppleAiStatus::default();
+    };
+
+    let output = Command::new(bin).arg("status").output();
+    let Ok(out) = output else {
+        return AppleAiStatus::default();
+    };
+    if !out.status.success() {
+        return AppleAiStatus::default();
+    }
+
+    let raw = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(raw.trim()).unwrap_or_default();
+    AppleAiStatus {
+        foundation_model_available: parsed["foundationModelAvailable"].as_bool().unwrap_or(false),
+        foundation_model_reason: parsed["foundationModelReason"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string(),
+        speech_analyzer_available: parsed["speechAnalyzerAvailable"].as_bool().unwrap_or(false),
+        macos_version: parsed["macosVersion"].as_str().unwrap_or("").to_string(),
+        helper_found: true,
+    }
+}
+
+pub async fn polish_on_device(app: &AppHandle, text: &str, context: &str) -> Result<String> {
+    let bin = resolve_helper_path(app).ok_or_else(|| anyhow!("Apple AI helper not found"))?;
+    let input = text.to_string();
+    let ctx = context.to_string();
+
+    tokio::task::spawn_blocking(move || -> Result<String> {
+        let mut child = Command::new(bin)
+            .args(["polish", "--context", &ctx])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(input.as_bytes())?;
+        }
+
+        let output = child.wait_with_output()?;
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(anyhow!("Apple Foundation Model failed: {}", err));
+        }
+
+        let cleaned = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if cleaned.is_empty() {
+            Ok(input)
+        } else {
+            Ok(cleaned)
+        }
+    })
+    .await?
+}
+
+pub async fn transcribe_wav_on_device(
+    app: &AppHandle,
+    wav_bytes: &[u8],
+    language: &str,
+    vocab: &str,
+) -> Result<String> {
+    let bin = resolve_helper_path(app).ok_or_else(|| anyhow!("Apple AI helper not found"))?;
+    let bytes = wav_bytes.to_vec();
+    let lang = language.to_string();
+    let vocab_csv = vocab.to_string();
+
+    tokio::task::spawn_blocking(move || -> Result<String> {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let tmp_wav = std::env::temp_dir().join(format!("vani_apple_stt_{}.wav", ts));
+        std::fs::write(&tmp_wav, &bytes)?;
+
+        let wav_str = tmp_wav.to_string_lossy().to_string();
+        let output = Command::new(bin)
+            .args([
+                "transcribe",
+                "--wav",
+                &wav_str,
+                "--language",
+                &lang,
+                "--vocab",
+                &vocab_csv,
+            ])
+            .output();
+
+        let _ = std::fs::remove_file(&tmp_wav);
+
+        let output = output?;
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(anyhow!("Apple SpeechAnalyzer failed: {}", err));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    })
+    .await?
+}

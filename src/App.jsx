@@ -46,8 +46,8 @@ const defaultSettings = {
   theme: "dark",
   openaiKey: "",
   anthropicKey: "",
-  transcriptionProvider: "local",
-  cleanupProvider: "none",
+  transcriptionProvider: "apple",
+  cleanupProvider: "apple",
   cleanupContext: "general",
   fillerWordRemoval: true,
   onboardingComplete: true,
@@ -178,6 +178,13 @@ export default function App() {
   const [models, setModels] = useState([]);
   const [downloads, setDownloads] = useState({});
   const [whisperStatus, setWhisperStatus] = useState({ binaryFound: true, modelInstalled: false });
+  const [appleAi, setAppleAi] = useState({
+    foundationModelAvailable: false,
+    foundationModelReason: "checking",
+    speechAnalyzerAvailable: false,
+    macosVersion: "",
+    helperFound: false,
+  });
   const [permissions, setPermissions] = useState({ microphone: "unknown", accessibility: true });
   const [appError, setAppError] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -211,13 +218,14 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-      const [savedSettings, nextNotes, nextHistory, nextModels, nextPermissions, status] = await Promise.all([
+      const [savedSettings, nextNotes, nextHistory, nextModels, nextPermissions, status, appleStatus] = await Promise.all([
         window.vani?.getSettings?.(),
         window.vani?.listNotes?.(),
         window.vani?.getHistory?.(),
         window.vani?.listModels?.(),
         window.vani?.checkPermissions?.(),
         window.vani?.whisperStatus?.(),
+        window.vani?.appleAiStatus?.(),
       ]);
 
       if (!mounted) return;
@@ -230,6 +238,7 @@ export default function App() {
       setModels(nextModels || []);
       setPermissions(nextPermissions || { microphone: "unknown", accessibility: true });
       if (status) setWhisperStatus(status);
+      if (appleStatus) setAppleAi(appleStatus);
     };
 
     load();
@@ -363,9 +372,9 @@ export default function App() {
   };
 
   const handleSetActiveModel = (modelId) => {
-    saveSettings({ whisperModel: modelId });
+    saveSettings({ whisperModel: modelId, transcriptionProvider: "local" });
     refreshStatus();
-    notify(`Active model switched to ${modelId}`);
+    notify(`Switched speech engine to ${modelId}`);
   };
 
   const handleImportParakeet = async (modelId) => {
@@ -421,6 +430,7 @@ export default function App() {
             onSaveSettings={saveSettings}
             permissions={permissions}
             whisperStatus={whisperStatus}
+            appleAi={appleAi}
             models={models}
             history={history}
             onNavigate={setActive}
@@ -458,7 +468,7 @@ export default function App() {
           />
         );
       case "modes":
-        return <ModesView settings={settings} onSaveSettings={saveSettings} onNotify={notify} />;
+        return <ModesView settings={settings} appleAi={appleAi} onSaveSettings={saveSettings} onNotify={notify} />;
       case "dictionary":
         return <DictionaryView settings={settings} onSaveSettings={saveSettings} onNotify={notify} />;
       case "models":
@@ -467,12 +477,16 @@ export default function App() {
             models={models}
             downloads={downloads}
             activeModel={settings.whisperModel}
+            settings={settings}
+            appleAi={appleAi}
+            onSaveSettings={saveSettings}
             onDownload={handleDownloadModel}
             onCancel={handleCancelDownload}
             onDelete={handleDeleteModel}
             onSetActive={handleSetActiveModel}
             onImport={handleImportParakeet}
             onOpenModelsDir={() => window.vani?.openModelsDir?.()}
+            onNotify={notify}
             error={appError}
           />
         );
@@ -485,6 +499,7 @@ export default function App() {
             onChange={saveSettings}
             models={models}
             whisperStatus={whisperStatus}
+            appleAi={appleAi}
             permissions={permissions}
             onRecheckPermissions={recheckPermissions}
             onOpenModelsDir={() => window.vani?.openModelsDir?.()}
@@ -583,7 +598,9 @@ export default function App() {
             <span className="flex items-center gap-1.5 font-medium text-[var(--text)]">
               <span
                 className={`h-2 w-2 rounded-full ${
-                  whisperStatus?.modelInstalled || settings.transcriptionProvider === "openai"
+                  settings.transcriptionProvider === "apple" ||
+                  whisperStatus?.modelInstalled ||
+                  settings.transcriptionProvider === "openai"
                     ? "bg-[var(--emerald)]"
                     : "bg-[var(--amber)]"
                 }`}
@@ -593,7 +610,10 @@ export default function App() {
             {settings.privacyMode && <Shield className="h-3 w-3 text-[var(--emerald)]" />}
           </div>
           <p className="mt-1 truncate font-mono text-[10px] text-[var(--muted)]">
-            {settings.whisperModel} · {settings.cleanupContext || "general"}
+            {settings.transcriptionProvider === "apple"
+              ? "Apple On-Device"
+              : settings.whisperModel}{" "}
+            · {settings.cleanupContext || "general"}
           </p>
           <div className="mt-2 flex items-center justify-between border-t border-[var(--border)] pt-2 text-[10px] text-[var(--muted)]">
             <span>Hold to speak</span>
