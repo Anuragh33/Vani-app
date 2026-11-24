@@ -105,11 +105,7 @@ function FloatingPillSandbox({ settings, onOpenHudStudio }) {
         {(previewPhase === "done" || previewPhase === "error") && (
           <BottomHudPill
             phase={previewPhase}
-            text={
-              previewPhase === "done"
-                ? "Pasted: “Ship the new VANI release…”"
-                : "Microphone permission needed"
-            }
+            text={previewPhase === "done" ? "Done" : "Microphone permission needed"}
             visible
             glass={settings.hudGlass !== false}
           />

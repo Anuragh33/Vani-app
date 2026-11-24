@@ -504,11 +504,7 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
             {showBottom && (
               <BottomHudPill
                 phase={phase}
-                text={
-                  phase === "done"
-                    ? "Pasted: “Ship the new HUD and menu bar preview today!”"
-                    : "Microphone permission required"
-                }
+                text={phase === "done" ? "Done" : "Microphone permission required"}
                 visible={showBottom}
                 glass={hudGlass}
               />
