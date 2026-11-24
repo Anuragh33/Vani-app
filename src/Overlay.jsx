@@ -161,31 +161,38 @@ function MinimalBars({ levels, active }) {
   );
 }
 
-function OrbitDots() {
+function OrbitDots({ compact = false }) {
   return (
-    <div className="relative flex h-[26px] w-[42px] items-center justify-center">
-      <style>{`
-        @keyframes vaniOrbit {
-          from { transform: rotate(var(--od)) translateX(8px) rotate(calc(-1*var(--od))); }
-          to   { transform: rotate(calc(var(--od) + 360deg)) translateX(8px) rotate(calc(-1*(var(--od)+360deg))); }
-        }
-      `}</style>
-      {[
-        { deg: 0, color: "#f472b6", dur: "0.88s" },
-        { deg: 120, color: "#a78bfa", dur: "0.96s" },
-        { deg: 240, color: "#67e8f9", dur: "1.04s" },
-      ].map(({ deg, color, dur }, i) => (
-        <span
-          key={i}
-          className="absolute h-[4.5px] w-[4.5px] rounded-full"
-          style={{
-            "--od": `${deg}deg`,
-            background: color,
-            boxShadow: `0 0 6px 1px ${color}88`,
-            animation: `vaniOrbit ${dur} linear infinite`,
-          }}
-        />
-      ))}
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="relative flex h-[26px] w-[32px] items-center justify-center">
+        <style>{`
+          @keyframes vaniOrbit {
+            from { transform: rotate(var(--od)) translateX(7.5px) rotate(calc(-1*var(--od))); }
+            to   { transform: rotate(calc(var(--od) + 360deg)) translateX(7.5px) rotate(calc(-1*(var(--od)+360deg))); }
+          }
+        `}</style>
+        {[
+          { deg: 0, color: "#f472b6", dur: "0.88s" },
+          { deg: 120, color: "#a78bfa", dur: "0.96s" },
+          { deg: 240, color: "#67e8f9", dur: "1.04s" },
+        ].map(({ deg, color, dur }, i) => (
+          <span
+            key={i}
+            className="absolute h-[4px] w-[4px] rounded-full"
+            style={{
+              "--od": `${deg}deg`,
+              background: color,
+              boxShadow: `0 0 6px 1px ${color}88`,
+              animation: `vaniOrbit ${dur} linear infinite`,
+            }}
+          />
+        ))}
+      </div>
+      {!compact && (
+        <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.84)", letterSpacing: "0.01em" }}>
+          Transcribing…
+        </span>
+      )}
     </div>
   );
 }
@@ -253,7 +260,7 @@ export function FloatingHudPill({
       }}
     >
       {processing ? (
-        <OrbitDots />
+        <OrbitDots compact={compact} />
       ) : (
         <>
           <span
