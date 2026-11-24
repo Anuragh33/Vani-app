@@ -77,12 +77,16 @@ export default function VaniNotes({ notes, onSaveNote, onDeleteNote, onExportNot
     onSaveNote(nextNote);
   };
 
-  const appendDictation = async (wavBuffer) => {
+  const appendDictation = async (payload) => {
     setDictating(false);
     setSimMic(false);
     setTranscribing(true);
     try {
-      const r = await window.vani?.dictationComplete?.({ wavBuffer: wavBuffer || new ArrayBuffer(44) });
+      const arg =
+        payload && typeof payload === "object" && ("wavPath" in payload || "wavBuffer" in payload)
+          ? payload
+          : { wavBuffer: payload || new ArrayBuffer(44) };
+      const r = await window.vani?.dictationComplete?.(arg);
       if (r?.ok && r.text) {
         const target = activeNote || createEmptyNote();
         const sep = target.content.trim() ? "\n\n" : "";
@@ -113,8 +117,8 @@ export default function VaniNotes({ notes, onSaveNote, onDeleteNote, onExportNot
 
   const toggleVoiceDictation = () => {
     if (dictating) {
-      if (simMic || !recorder.isRecording) {
-        appendDictation(new ArrayBuffer(44));
+      if (simMic || (window.vani?.isPreview && !recorder.isRecording)) {
+        appendDictation({ wavBuffer: new ArrayBuffer(44) });
       } else {
         recorder.stop();
       }

@@ -16,6 +16,7 @@ pub struct AppState {
     pub app_data_dir: PathBuf,
     pub dictation_active: Arc<Mutex<bool>>,
     pub frontmost_app: Arc<Mutex<Option<String>>>,
+    pub native_recording: Arc<Mutex<Option<apple_ai::ActiveNativeRecording>>>,
 }
 
 fn now_iso() -> String {
@@ -83,14 +84,93 @@ pub async fn save_settings(
 }
 
 #[tauri::command]
+pub async fn start_native_recording(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<serde_json::Value, String> {
+    // Cancel any leftover recorder first
+    if let Ok(mut guard) = state.native_recording.lock() {
+        if let Some(prev) = guard.take() {
+            apple_ai::cancel_native_recording(prev);
+        }
+    }
+
+    let app_clone = app.clone();
+    let rec = tokio::task::spawn_blocking(move || apple_ai::start_native_recording(&app_clone))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+
+    let mut guard = state.native_recording.lock().map_err(|e| e.to_string())?;
+    *guard = Some(rec);
+    Ok(serde_json::json!({ "ok": true }))
+}
+
+#[tauri::command]
+pub async fn stop_native_recording(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let rec = {
+        let mut guard = state.native_recording.lock().map_err(|e| e.to_string())?;
+        guard.take()
+    };
+    let Some(rec) = rec else {
+        return Ok(serde_json::json!({ "ok": false, "error": "No active recording." }));
+    };
+
+    let (wav_path, samples, peak) =
+        tokio::task::spawn_blocking(move || apple_ai::stop_native_recording(rec))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "ok": true,
+        "wavPath": wav_path.to_string_lossy(),
+        "samples": samples,
+        "peak": peak
+    }))
+}
+
+#[tauri::command]
+pub async fn cancel_native_recording(state: State<'_, AppState>) -> Result<(), String> {
+    let rec = {
+        let mut guard = state.native_recording.lock().map_err(|e| e.to_string())?;
+        guard.take()
+    };
+    if let Some(rec) = rec {
+        tokio::task::spawn_blocking(move || apple_ai::cancel_native_recording(rec))
+            .await
+            .ok();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn dictation_complete(
     state: State<'_, AppState>,
     app: AppHandle,
-    wav_buffer: Vec<u8>,
+    wav_buffer: Option<Vec<u8>>,
+    wav_path: Option<String>,
 ) -> Result<serde_json::Value, String> {
     {
         let mut active = state.dictation_active.lock().map_err(|e| e.to_string())?;
         *active = false;
+    }
+
+    let wav_buffer = if let Some(path_str) = wav_path {
+        let bytes = std::fs::read(&path_str).map_err(|e| format!("Failed to read recorded audio: {}", e))?;
+        let _ = std::fs::remove_file(&path_str);
+        bytes
+    } else {
+        wav_buffer.unwrap_or_default()
+    };
+
+    if wav_buffer.len() <= 44 {
+        return Ok(serde_json::json!({
+            "ok": false,
+            "error": "No audio captured. Check System Settings → Privacy & Security → Microphone for VANI."
+        }));
     }
 
     let settings = {
@@ -464,21 +544,27 @@ pub async fn delete_note(state: State<'_, AppState>, note_id: String) -> Result<
 }
 
 #[tauri::command]
-pub async fn check_permissions() -> Result<serde_json::Value, String> {
+pub async fn check_permissions(app: AppHandle) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
-        // Check mic permission status via system_profiler or privacy API
-        // We approximate: if we can open /dev/null as audio, mic is likely granted
-        // Real check requires macOS-specific FFI
-        let mic_status = "unknown"; // Tauri will prompt on first use
+        let apple_status = apple_ai::check_status(&app);
+        let mic_status = if apple_status.helper_found {
+            apple_status.mic_permission
+        } else {
+            "unknown".into()
+        };
         let acc = Command::new("osascript")
             .arg("-e")
             .arg("tell application \"System Events\" to return true")
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false);
-        return Ok(serde_json::json!({ "microphone": mic_status, "accessibility": acc }));
+        return Ok(serde_json::json!({
+            "microphone": mic_status,
+            "speech": apple_status.speech_permission,
+            "accessibility": acc
+        }));
     }
     #[allow(unreachable_code)]
     Ok(serde_json::json!({ "microphone": "unknown", "accessibility": true }))

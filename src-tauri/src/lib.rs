@@ -158,6 +158,7 @@ pub fn run() {
                 app_data_dir,
                 dictation_active: Arc::new(Mutex::new(false)),
                 frontmost_app: Arc::new(Mutex::new(None)),
+                native_recording: Arc::new(Mutex::new(None)),
             };
             app.manage(state);
 
@@ -177,6 +178,9 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::dictation_complete,
+            commands::start_native_recording,
+            commands::stop_native_recording,
+            commands::cancel_native_recording,
             commands::inject_overlay_text,
             commands::inject_text,
             commands::list_models,

@@ -152,10 +152,14 @@ export default function HomeView({
     }
   };
 
-  const runTranscribe = async (wavBuffer) => {
+  const runTranscribe = async (payload) => {
     setPhase("processing");
     try {
-      const r = await window.vani?.dictationComplete?.({ wavBuffer: wavBuffer || new ArrayBuffer(44) });
+      const arg =
+        payload && typeof payload === "object" && ("wavPath" in payload || "wavBuffer" in payload)
+          ? payload
+          : { wavBuffer: payload || new ArrayBuffer(44) };
+      const r = await window.vani?.dictationComplete?.(arg);
       if (r && r.ok === false) {
         setResult({ error: r.error || "Nothing heard." });
         setPhase("error");
@@ -182,10 +186,10 @@ export default function HomeView({
       setPhase("error");
       setResult({ error: msg });
     },
-    onRecordingComplete: async (wavBuffer) => {
+    onRecordingComplete: async (payload) => {
       stopTimer();
       setSimulatingMic(false);
-      await runTranscribe(wavBuffer);
+      await runTranscribe(payload);
     },
   });
 
@@ -210,9 +214,9 @@ export default function HomeView({
 
   const stopRecording = () => {
     stopTimer();
-    if (simulatingMic || !recorder.isRecording) {
+    if (simulatingMic || (window.vani?.isPreview && !recorder.isRecording)) {
       setSimulatingMic(false);
-      runTranscribe(new ArrayBuffer(44));
+      runTranscribe({ wavBuffer: new ArrayBuffer(44) });
     } else {
       recorder.stop();
     }

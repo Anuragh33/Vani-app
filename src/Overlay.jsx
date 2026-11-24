@@ -503,12 +503,16 @@ export default function Overlay() {
       setText(msg || "Mic error");
       scheduleHide(2400);
     },
-    onRecordingComplete: async (wavBuffer) => {
+    onRecordingComplete: async (payload) => {
       stopClock();
       setPhase("processing");
       setText("");
       try {
-        const result = await window.vani?.dictationComplete?.({ wavBuffer });
+        const arg =
+          payload && typeof payload === "object" && ("wavPath" in payload || "wavBuffer" in payload)
+            ? payload
+            : { wavBuffer: payload };
+        const result = await window.vani?.dictationComplete?.(arg);
         if (!result?.ok) {
           if (!result?.error || result.error === "Nothing heard.") {
             scheduleHide(0);

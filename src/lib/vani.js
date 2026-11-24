@@ -355,8 +355,15 @@ const tauriBridge = {
   onDictationStart: (cb) => subscribe("dictation-start", cb),
   onDictationStop: (cb) => subscribe("dictation-stop", cb),
   onOverlayShown: (cb) => subscribe("overlay-shown", cb),
-  dictationComplete: ({ wavBuffer }) =>
-    invoke("dictation_complete", { wavBuffer: Array.from(new Uint8Array(wavBuffer)) }),
+  onNativeAudioLevel: (cb) => subscribe("native-audio-level", cb),
+  startNativeRecording: () => invoke("start_native_recording"),
+  stopNativeRecording: () => invoke("stop_native_recording"),
+  cancelNativeRecording: () => invoke("cancel_native_recording"),
+  dictationComplete: ({ wavBuffer, wavPath }) =>
+    invoke("dictation_complete", {
+      wavBuffer: wavBuffer ? Array.from(new Uint8Array(wavBuffer)) : null,
+      wavPath: wavPath || null,
+    }),
   cancelDictation: () => invoke("cancel_dictation"),
 
   // Injection

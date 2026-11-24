@@ -11,6 +11,7 @@ func printJSON(_ dict: [String: Any]) {
     if let data = try? JSONSerialization.data(withJSONObject: dict, options: []),
        let str = String(data: data, encoding: .utf8) {
         print(str)
+        fflush(stdout)
     }
 }
 
@@ -26,6 +27,24 @@ func contextHint(for context: String) -> String {
         return "Preserve technical identifiers, filenames, and programming terms precisely. Format as a crisp developer prompt or comment."
     default:
         return "Fix grammar, capitalization, and punctuation while preserving natural phrasing."
+    }
+}
+
+func micPermissionString() -> String {
+    switch AVCaptureDevice.authorizationStatus(for: .audio) {
+    case .authorized: return "granted"
+    case .denied, .restricted: return "denied"
+    case .notDetermined: return "unknown"
+    @unknown default: return "unknown"
+    }
+}
+
+func speechPermissionString() -> String {
+    switch SFSpeechRecognizer.authorizationStatus() {
+    case .authorized: return "granted"
+    case .denied, .restricted: return "denied"
+    case .notDetermined: return "unknown"
+    @unknown default: return "unknown"
     }
 }
 
@@ -58,8 +77,174 @@ func runStatus() {
         "foundationModelAvailable": fmAvailable,
         "foundationModelReason": fmReason,
         "speechAnalyzerAvailable": speechAvailable,
+        "micPermission": micPermissionString(),
+        "speechPermission": speechPermissionString(),
         "macosVersion": "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
     ])
+}
+
+// MARK: - Native CoreAudio Record Command (writes 16kHz mono PCM WAV)
+
+func writeWav16kMono(samples: [Int16], to url: URL) throws {
+    let sampleRate: UInt32 = 16000
+    let numChannels: UInt16 = 1
+    let bitsPerSample: UInt16 = 16
+    let byteRate: UInt32 = sampleRate * UInt32(numChannels) * UInt32(bitsPerSample / 8)
+    let blockAlign: UInt16 = numChannels * (bitsPerSample / 8)
+    let dataSize: UInt32 = UInt32(samples.count * 2)
+    let chunkSize: UInt32 = 36 + dataSize
+
+    var data = Data(capacity: 44 + Int(dataSize))
+    func appendLE<T: FixedWidthInteger>(_ v: T) {
+        var le = v.littleEndian
+        withUnsafeBytes(of: &le) { data.append(contentsOf: $0) }
+    }
+
+    data.append(contentsOf: "RIFF".utf8)
+    appendLE(chunkSize)
+    data.append(contentsOf: "WAVE".utf8)
+    data.append(contentsOf: "fmt ".utf8)
+    appendLE(UInt32(16))
+    appendLE(UInt16(1)) // PCM
+    appendLE(numChannels)
+    appendLE(sampleRate)
+    appendLE(byteRate)
+    appendLE(blockAlign)
+    appendLE(bitsPerSample)
+    data.append(contentsOf: "data".utf8)
+    appendLE(dataSize)
+
+    samples.withUnsafeBufferPointer { buf in
+        if let base = buf.baseAddress {
+            data.append(UnsafeBufferPointer(start: UnsafeRawPointer(base).assumingMemoryBound(to: UInt8.self), count: samples.count * 2))
+        }
+    }
+
+    try data.write(to: url, options: .atomic)
+}
+
+final class SampleCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pcm: [Int16] = []
+    private var maxPeak: Float = 0
+
+    func append(floats: UnsafePointer<Float>, count: Int) -> Float {
+        var peak: Float = 0
+        var chunk = [Int16](repeating: 0, count: count)
+        for i in 0..<count {
+            let v = max(-1.0, min(1.0, floats[i]))
+            let av = abs(v)
+            if av > peak { peak = av }
+            chunk[i] = Int16(v * 32767.0)
+        }
+        lock.lock()
+        pcm.append(contentsOf: chunk)
+        if peak > maxPeak { maxPeak = peak }
+        lock.unlock()
+        return peak
+    }
+
+    func snapshot() -> ([Int16], Float) {
+        lock.lock()
+        let out = (pcm, maxPeak)
+        lock.unlock()
+        return out
+    }
+}
+
+func runRecord(outPath: String) async {
+    // Request Microphone permission if not yet determined
+    let authStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+    if authStatus == .notDetermined {
+        let granted = await AVCaptureDevice.requestAccess(for: .audio)
+        if !granted {
+            fputs("Microphone permission denied.\n", stderr)
+            exit(10)
+        }
+    } else if authStatus == .denied || authStatus == .restricted {
+        fputs("Microphone permission denied. Enable VANI in System Settings -> Privacy & Security -> Microphone.\n", stderr)
+        exit(10)
+    }
+
+    let engine = AVAudioEngine()
+    let inputNode = engine.inputNode
+    let inputFormat = inputNode.outputFormat(forBus: 0)
+    guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+        fputs("No active microphone input device found.\n", stderr)
+        exit(11)
+    }
+
+    guard let targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false),
+          let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+        fputs("Failed to initialize audio format converter.\n", stderr)
+        exit(12)
+    }
+
+    let collector = SampleCollector()
+    var lastPrint = CFAbsoluteTimeGetCurrent()
+
+    inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { buffer, _ in
+        let ratio = 16000.0 / inputFormat.sampleRate
+        let outCap = AVAudioFrameCount(Double(buffer.frameLength) * ratio + 64)
+        guard let outBuf = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outCap) else { return }
+
+        var consumed = false
+        var err: NSError?
+        converter.convert(to: outBuf, error: &err) { _, status in
+            if consumed {
+                status.pointee = .noDataNow
+                return nil
+            }
+            consumed = true
+            status.pointee = .haveData
+            return buffer
+        }
+
+        if let ch = outBuf.floatChannelData?[0], outBuf.frameLength > 0 {
+            let peak = collector.append(floats: ch, count: Int(outBuf.frameLength))
+            let now = CFAbsoluteTimeGetCurrent()
+            if now - lastPrint >= 0.04 {
+                lastPrint = now
+                print(String(format: "LEVEL %.4f", min(1.0, peak * 2.6)))
+                fflush(stdout)
+            }
+        }
+    }
+
+    do {
+        engine.prepare()
+        try engine.start()
+        print("READY")
+        fflush(stdout)
+    } catch {
+        fputs("Failed to start microphone capture: \(error.localizedDescription)\n", stderr)
+        exit(13)
+    }
+
+    // Block on stdin until parent sends STOP or closes stdin
+    await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+        DispatchQueue.global(qos: .userInteractive).async {
+            while let line = readLine(strippingNewline: true) {
+                if line.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "STOP" {
+                    break
+                }
+            }
+            cont.resume()
+        }
+    }
+
+    inputNode.removeTap(onBus: 0)
+    engine.stop()
+
+    let (samples, maxPeak) = collector.snapshot()
+    do {
+        try writeWav16kMono(samples: samples, to: URL(fileURLWithPath: outPath))
+        print(String(format: "DONE %d %.5f", samples.count, maxPeak))
+        fflush(stdout)
+    } catch {
+        fputs("Failed to write WAV: \(error.localizedDescription)\n", stderr)
+        exit(14)
+    }
 }
 
 // MARK: - Polish Command (Apple FoundationModels On-Device LLM)
@@ -125,7 +310,6 @@ func runTranscribe(wavPath: String, language: String, vocabCSV: String) async {
         let resolvedLocale = (await SpeechTranscriber.supportedLocale(equivalentTo: locale)) ?? Locale(identifier: "en_US")
         let transcriber = SpeechTranscriber(locale: resolvedLocale, preset: .transcription)
 
-        // Ensure on-device asset is installed
         let status = await AssetInventory.status(forModules: [transcriber])
         if status == .supported || status == .downloading {
             if let req = try? await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
@@ -149,14 +333,21 @@ func runTranscribe(wavPath: String, language: String, vocabCSV: String) async {
         do {
             let audioFile = try AVAudioFile(forReading: fileURL)
             let resultsTask = Task<String, Error> {
-                var chunks: [String] = []
+                var finalChunks: [String] = []
+                var lastVolatile = ""
                 for try await result in transcriber.results {
+                    let piece = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
                     if result.isFinal {
-                        let piece = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !piece.isEmpty { chunks.append(piece) }
+                        if !piece.isEmpty { finalChunks.append(piece) }
+                        lastVolatile = ""
+                    } else if !piece.isEmpty {
+                        lastVolatile = piece
                     }
                 }
-                return chunks.joined(separator: " ")
+                if !lastVolatile.isEmpty {
+                    finalChunks.append(lastVolatile)
+                }
+                return finalChunks.joined(separator: " ")
             }
 
             let lastSample = try await analyzer.analyzeSequence(from: audioFile)
@@ -197,6 +388,13 @@ struct VaniAppleAI {
         switch cmd {
         case "status":
             runStatus()
+        case "record":
+            let out = argValue("--out")
+            if out.isEmpty {
+                fputs("Missing --out <wav_path>\n", stderr)
+                exit(1)
+            }
+            await runRecord(outPath: out)
         case "polish":
             let ctx = argValue("--context", default: "general")
             await runPolish(context: ctx)

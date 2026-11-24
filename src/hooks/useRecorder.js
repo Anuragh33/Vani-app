@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const TARGET_SAMPLE_RATE = 16000;
+const POINTS = 26;
 
 function averageMagnitude(arr) {
   if (!arr.length) return 0;
@@ -9,7 +10,7 @@ function averageMagnitude(arr) {
   return sum / arr.length;
 }
 
-function normalizeLevels(timeDomain, points = 26) {
+function normalizeLevels(timeDomain, points = POINTS) {
   if (!timeDomain.length) return Array.from({ length: points }, () => 0.08);
   const chunkSize = Math.max(1, Math.floor(timeDomain.length / points));
   return Array.from({ length: points }, (_, i) => {
@@ -18,7 +19,7 @@ function normalizeLevels(timeDomain, points = 26) {
       const v = Math.abs(timeDomain[i * chunkSize + j] || 0);
       if (v > peak) peak = v;
     }
-    return Math.max(0.08, Math.min(1, peak * 2.2));
+    return Math.max(0.08, Math.min(1, peak * 2.4));
   });
 }
 
@@ -45,7 +46,9 @@ function downsample(input, inputRate, outputRate) {
 function encodeWav(samples, sampleRate) {
   const buffer = new ArrayBuffer(44 + samples.length * 2);
   const view = new DataView(buffer);
-  const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  const writeStr = (off, s) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
+  };
 
   writeStr(0, "RIFF");
   view.setUint32(4, 36 + samples.length * 2, true);
@@ -64,10 +67,20 @@ function encodeWav(samples, sampleRate) {
   let offset = 44;
   for (let i = 0; i < samples.length; i++) {
     const s = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
     offset += 2;
   }
   return buffer;
+}
+
+function canUseNativeMacRecorder() {
+  return (
+    typeof window !== "undefined" &&
+    window.vani &&
+    !window.vani.isPreview &&
+    window.vani.platform === "darwin" &&
+    typeof window.vani.startNativeRecording === "function"
+  );
 }
 
 function useRecorder({
@@ -75,13 +88,14 @@ function useRecorder({
   silenceDurationMs = 2000,
   onRecordingComplete,
   onStateChange,
-  onError
+  onError,
 }) {
   const streamRef = useRef(null);
   const audioContextRef = useRef(null);
   const processorRef = useRef(null);
   const analyserRef = useRef(null);
   const sourceRef = useRef(null);
+  const gainRef = useRef(null);
   const chunksRef = useRef([]);
   const totalSamplesRef = useRef(0);
   const sampleRateRef = useRef(0);
@@ -89,12 +103,15 @@ function useRecorder({
   const silenceStartedAtRef = useRef(null);
   const isRecordingRef = useRef(false);
   const stopRequestedRef = useRef(false);
-  const [levels, setLevels] = useState(Array.from({ length: 26 }, () => 0.08));
+  const usingNativeRef = useRef(false);
+  const unsubLevelRef = useRef(null);
+  const [levels, setLevels] = useState(() => Array.from({ length: POINTS }, () => 0.08));
   const [isRecording, setIsRecording] = useState(false);
 
-  const teardown = useCallback(() => {
+  const teardownWeb = useCallback(() => {
     window.cancelAnimationFrame(rafRef.current);
     try { processorRef.current?.disconnect(); } catch (_) {}
+    try { gainRef.current?.disconnect(); } catch (_) {}
     try { sourceRef.current?.disconnect(); } catch (_) {}
     try { analyserRef.current?.disconnect(); } catch (_) {}
     if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
@@ -104,18 +121,30 @@ function useRecorder({
     streamRef.current = null;
     audioContextRef.current = null;
     processorRef.current = null;
+    gainRef.current = null;
     analyserRef.current = null;
     sourceRef.current = null;
     silenceStartedAtRef.current = null;
   }, []);
 
-  const finalize = useCallback(async () => {
+  const teardownNative = useCallback(() => {
+    if (unsubLevelRef.current) {
+      unsubLevelRef.current();
+      unsubLevelRef.current = null;
+    }
+    silenceStartedAtRef.current = null;
+  }, []);
+
+  const finalizeWeb = useCallback(async () => {
     const chunks = chunksRef.current;
     const total = totalSamplesRef.current;
-    const sourceRate = sampleRateRef.current;
+    const sourceRate = sampleRateRef.current || 16000;
     const merged = new Float32Array(total);
     let pos = 0;
-    for (const c of chunks) { merged.set(c, pos); pos += c.length; }
+    for (const c of chunks) {
+      merged.set(c, pos);
+      pos += c.length;
+    }
     chunksRef.current = [];
     totalSamplesRef.current = 0;
 
@@ -125,30 +154,96 @@ function useRecorder({
     isRecordingRef.current = false;
     setIsRecording(false);
     onStateChange?.(false);
-    teardown();
-    await onRecordingComplete?.(wav);
-  }, [onRecordingComplete, onStateChange, teardown]);
+    teardownWeb();
+    await onRecordingComplete?.({ wavBuffer: wav });
+  }, [onRecordingComplete, onStateChange, teardownWeb]);
+
+  const finalizeNative = useCallback(async () => {
+    isRecordingRef.current = false;
+    usingNativeRef.current = false;
+    setIsRecording(false);
+    onStateChange?.(false);
+    teardownNative();
+
+    try {
+      const res = await window.vani.stopNativeRecording();
+      if (!res?.ok || !res.wavPath) {
+        onError?.(res?.error || "Recording failed.");
+        return;
+      }
+      if (!res.samples || res.samples < 800 || (typeof res.peak === "number" && res.peak < 0.0004)) {
+        onError?.("No speech detected from microphone. Check macOS Privacy & Security → Microphone and your input device.");
+        return;
+      }
+      await onRecordingComplete?.({ wavPath: res.wavPath });
+    } catch (err) {
+      onError?.(err?.message || "Failed to finalize recording.");
+    }
+  }, [onError, onRecordingComplete, onStateChange, teardownNative]);
 
   const stop = useCallback(() => {
     if (!isRecordingRef.current || stopRequestedRef.current) return;
     stopRequestedRef.current = true;
-    finalize();
-  }, [finalize]);
+    if (usingNativeRef.current) {
+      finalizeNative();
+    } else {
+      finalizeWeb();
+    }
+  }, [finalizeNative, finalizeWeb]);
 
   const start = useCallback(async () => {
     if (isRecordingRef.current) return;
     stopRequestedRef.current = false;
+    silenceStartedAtRef.current = null;
+
+    // Prefer native macOS CoreAudio (AVAudioEngine) inside Tauri — avoids WKWebView getUserMedia silence bugs
+    if (canUseNativeMacRecorder()) {
+      try {
+        usingNativeRef.current = true;
+        unsubLevelRef.current = window.vani.onNativeAudioLevel?.((lvl) => {
+          const clamped = Math.max(0.06, Math.min(1, Number(lvl) || 0.06));
+          setLevels((prev) => [...prev.slice(1), clamped]);
+
+          if (enabledSilenceDetection) {
+            if (clamped < 0.085) {
+              if (!silenceStartedAtRef.current) silenceStartedAtRef.current = Date.now();
+              if (Date.now() - silenceStartedAtRef.current >= silenceDurationMs) {
+                stop();
+              }
+            } else {
+              silenceStartedAtRef.current = null;
+            }
+          }
+        });
+
+        await window.vani.startNativeRecording();
+        isRecordingRef.current = true;
+        setIsRecording(true);
+        onStateChange?.(true);
+        return;
+      } catch (nativeErr) {
+        teardownNative();
+        usingNativeRef.current = false;
+        onError?.(typeof nativeErr === "string" ? nativeErr : nativeErr?.message || "Unable to start microphone.");
+        return;
+      }
+    }
+
+    // Web Audio fallback (browser preview / non-macOS)
     chunksRef.current = [];
     totalSamplesRef.current = 0;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, noiseSuppression: true, echoCancellation: true }
+        audio: { channelCount: 1, noiseSuppression: true, echoCancellation: true },
       });
       streamRef.current = stream;
 
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const audioContext = new AudioCtx();
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
       audioContextRef.current = audioContext;
       sampleRateRef.current = audioContext.sampleRate;
 
@@ -169,8 +264,14 @@ function useRecorder({
         chunksRef.current.push(copy);
         totalSamplesRef.current += copy.length;
       };
+
+      const silentGain = audioContext.createGain();
+      silentGain.gain.value = 0;
+      gainRef.current = silentGain;
+
       source.connect(processor);
-      processor.connect(audioContext.destination);
+      processor.connect(silentGain);
+      silentGain.connect(audioContext.destination);
 
       const timeData = new Float32Array(analyser.fftSize);
       const tick = () => {
@@ -179,8 +280,7 @@ function useRecorder({
 
         if (enabledSilenceDetection) {
           const mag = averageMagnitude(timeData);
-          const threshold = 0.012;
-          if (mag < threshold) {
+          if (mag < 0.012) {
             if (!silenceStartedAtRef.current) silenceStartedAtRef.current = Date.now();
             if (Date.now() - silenceStartedAtRef.current >= silenceDurationMs) {
               stop();
@@ -199,11 +299,20 @@ function useRecorder({
       tick();
     } catch (error) {
       onError?.(error.message || "Unable to access the microphone.");
-      teardown();
+      teardownWeb();
     }
-  }, [enabledSilenceDetection, onError, onStateChange, silenceDurationMs, stop, teardown]);
+  }, [enabledSilenceDetection, onError, onStateChange, silenceDurationMs, stop, teardownNative, teardownWeb]);
 
-  useEffect(() => () => teardown(), [teardown]);
+  useEffect(
+    () => () => {
+      teardownWeb();
+      teardownNative();
+      if (usingNativeRef.current) {
+        window.vani?.cancelNativeRecording?.();
+      }
+    },
+    [teardownNative, teardownWeb]
+  );
 
   return useMemo(() => ({ start, stop, isRecording, levels }), [isRecording, levels, start, stop]);
 }

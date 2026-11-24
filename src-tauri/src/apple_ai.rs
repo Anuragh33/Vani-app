@@ -1,9 +1,10 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use tauri::{AppHandle, Manager};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -11,6 +12,8 @@ pub struct AppleAiStatus {
     pub foundation_model_available: bool,
     pub foundation_model_reason: String,
     pub speech_analyzer_available: bool,
+    pub mic_permission: String,
+    pub speech_permission: String,
     pub macos_version: String,
     pub helper_found: bool,
 }
@@ -21,10 +24,109 @@ impl Default for AppleAiStatus {
             foundation_model_available: false,
             foundation_model_reason: "Apple Intelligence helper not found".into(),
             speech_analyzer_available: false,
+            mic_permission: "unknown".into(),
+            speech_permission: "unknown".into(),
             macos_version: String::new(),
             helper_found: false,
         }
     }
+}
+
+pub struct ActiveNativeRecording {
+    child: Child,
+    stdin: Option<ChildStdin>,
+    wav_path: PathBuf,
+    stats: Arc<Mutex<(usize, f32)>>,
+}
+
+pub fn start_native_recording(app: &AppHandle) -> Result<ActiveNativeRecording> {
+    let bin = resolve_helper_path(app).ok_or_else(|| anyhow!("Apple AI audio helper not found"))?;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let wav_path = std::env::temp_dir().join(format!("vani_native_rec_{}.wav", ts));
+    let wav_str = wav_path.to_string_lossy().to_string();
+
+    let mut child = Command::new(bin)
+        .args(["record", "--out", &wav_str])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let stdin = child.stdin.take();
+    let stdout = child.stdout.take().ok_or_else(|| anyhow!("No stdout on recorder"))?;
+    let app_clone = app.clone();
+    let stats = Arc::new(Mutex::new((0usize, 0.0f32)));
+    let stats_clone = Arc::clone(&stats);
+
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<()>>();
+
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        let mut signaled = false;
+        for line in reader.lines().map_while(Result::ok) {
+            if line == "READY" {
+                if !signaled {
+                    let _ = ready_tx.send(Ok(()));
+                    signaled = true;
+                }
+            } else if let Some(rest) = line.strip_prefix("LEVEL ") {
+                if let Ok(level) = rest.trim().parse::<f32>() {
+                    let _ = app_clone.emit("native-audio-level", level);
+                }
+            } else if let Some(rest) = line.strip_prefix("DONE ") {
+                let mut parts = rest.split_whitespace();
+                let samples = parts.next().and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+                let peak = parts.next().and_then(|s| s.parse::<f32>().ok()).unwrap_or(0.0);
+                if let Ok(mut g) = stats_clone.lock() {
+                    *g = (samples, peak);
+                }
+            }
+        }
+        if !signaled {
+            let _ = ready_tx.send(Err(anyhow!("Recorder exited before ready")));
+        }
+    });
+
+    match ready_rx.recv_timeout(std::time::Duration::from_secs(6)) {
+        Ok(Ok(())) => Ok(ActiveNativeRecording {
+            child,
+            stdin,
+            wav_path,
+            stats,
+        }),
+        Ok(Err(_)) | Err(_) => {
+            let _ = child.kill();
+            let err_msg = child
+                .wait_with_output()
+                .map(|o| String::from_utf8_lossy(&o.stderr).trim().to_string())
+                .unwrap_or_default();
+            let _ = std::fs::remove_file(&wav_path);
+            if err_msg.is_empty() {
+                Err(anyhow!("Could not start microphone capture. Check System Settings -> Privacy & Security -> Microphone for VANI."))
+            } else {
+                Err(anyhow!("{}", err_msg))
+            }
+        }
+    }
+}
+
+pub fn stop_native_recording(mut rec: ActiveNativeRecording) -> Result<(PathBuf, usize, f32)> {
+    if let Some(mut stdin) = rec.stdin.take() {
+        let _ = stdin.write_all(b"STOP\n");
+        let _ = stdin.flush();
+    }
+    let _ = rec.child.wait();
+    let (samples, peak) = rec.stats.lock().map(|g| *g).unwrap_or((0, 0.0));
+    Ok((rec.wav_path, samples, peak))
+}
+
+pub fn cancel_native_recording(mut rec: ActiveNativeRecording) {
+    let _ = rec.child.kill();
+    let _ = rec.child.wait();
+    let _ = std::fs::remove_file(&rec.wav_path);
 }
 
 pub fn resolve_helper_path(app: &AppHandle) -> Option<PathBuf> {
@@ -71,6 +173,8 @@ pub fn check_status(app: &AppHandle) -> AppleAiStatus {
             .unwrap_or("unknown")
             .to_string(),
         speech_analyzer_available: parsed["speechAnalyzerAvailable"].as_bool().unwrap_or(false),
+        mic_permission: parsed["micPermission"].as_str().unwrap_or("unknown").to_string(),
+        speech_permission: parsed["speechPermission"].as_str().unwrap_or("unknown").to_string(),
         macos_version: parsed["macosVersion"].as_str().unwrap_or("").to_string(),
         helper_found: true,
     }
