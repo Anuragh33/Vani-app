@@ -78,6 +78,10 @@ pub async fn save_settings(
         store.update_settings(settings).map_err(|e| e.to_string())?
     };
 
+    // Update the real macOS menu bar tray icon immediately when trayIconStyle changes
+    let is_recording = state.dictation_active.lock().map(|g| *g).unwrap_or(false);
+    crate::tray_icons::apply_tray_style(&app, &next.tray_icon_style, is_recording);
+
     // Broadcast to all windows
     let _ = app.emit("settings-updated", &next);
     Ok(next)
@@ -547,19 +551,13 @@ pub async fn delete_note(state: State<'_, AppState>, note_id: String) -> Result<
 pub async fn check_permissions(app: AppHandle) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "macos")]
     {
-        use std::process::Command;
         let apple_status = apple_ai::check_status(&app);
         let mic_status = if apple_status.helper_found {
             apple_status.mic_permission
         } else {
             "unknown".into()
         };
-        let acc = Command::new("osascript")
-            .arg("-e")
-            .arg("tell application \"System Events\" to return true")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
+        let acc = crate::keymon::is_accessibility_trusted();
         return Ok(serde_json::json!({
             "microphone": mic_status,
             "speech": apple_status.speech_permission,
@@ -568,6 +566,26 @@ pub async fn check_permissions(app: AppHandle) -> Result<serde_json::Value, Stri
     }
     #[allow(unreachable_code)]
     Ok(serde_json::json!({ "microphone": "unknown", "accessibility": true }))
+}
+
+#[tauri::command]
+pub async fn open_accessibility_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        .spawn()
+        .ok();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn open_mic_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+        .spawn()
+        .ok();
+    Ok(())
 }
 
 #[tauri::command]

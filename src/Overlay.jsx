@@ -569,7 +569,9 @@ export default function Overlay() {
     });
     const offStop = window.vani?.onDictationStop?.(() => {
       stopClock();
-      setVisible(false);
+      // Keep pill visible through "Transcribing..." and "Pasted" states; scheduleHide dismisses it after paste.
+      setPhase("processing");
+      setVisible(true);
       recorder.stop();
     });
     return () => {

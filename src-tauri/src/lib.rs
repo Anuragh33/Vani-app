@@ -7,6 +7,7 @@ mod keymon;
 mod models;
 mod parakeet;
 mod transcribe;
+mod tray_icons;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -20,9 +21,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use commands::AppState;
 
-static TRAY_ICON: &[u8] = include_bytes!("../icons/icon.png");
-
 const DASHBOARD_HOTKEY: &str = "CommandOrControl+Shift+D";
+const DICTATE_HOTKEY: &str = "CommandOrControl+Shift+Space";
 
 fn get_overlay(app: &AppHandle) -> Option<tauri::WebviewWindow> {
     app.get_webview_window("overlay")
@@ -73,18 +73,26 @@ fn toggle_overlay(app: &AppHandle) {
     }
 }
 
-fn setup_tray(app: &mut App) -> tauri::Result<()> {
-    let dashboard_item = MenuItem::with_id(app, "dashboard", "Dashboard", true, None::<&str>)?;
-    let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+fn setup_tray(app: &mut App, initial_style: &str) -> tauri::Result<()> {
+    let dictate_item = MenuItem::with_id(app, "dictate", "Start / Stop Dictation", true, None::<&str>)?;
+    let dashboard_item = MenuItem::with_id(app, "dashboard", "Open Voice Studio", true, None::<&str>)?;
+    let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit VANI", true, None::<&str>)?;
 
-    let menu = Menu::with_items(app, &[&dashboard_item, &settings_item, &quit_item])?;
+    let menu = Menu::with_items(app, &[&dictate_item, &dashboard_item, &settings_item, &quit_item])?;
+    let (icon_img, as_template) = tray_icons::build_tray_icon(initial_style, false);
 
     TrayIconBuilder::with_id("vani-tray")
         .menu(&menu)
-        .tooltip("VANI")
-        .icon(tauri::image::Image::from_bytes(TRAY_ICON).expect("tray icon"))
+        .show_menu_on_left_click(false)
+        .tooltip("VANI — Hold ⌥ Option to dictate")
+        .icon(icon_img)
+        .icon_as_template(as_template)
         .on_menu_event(move |app, event| match event.id.as_ref() {
+            "dictate" => {
+                let app_bg = app.clone();
+                std::thread::spawn(move || keymon::toggle_overlay_dictation(&app_bg));
+            }
             "dashboard" => toggle_dashboard(app),
             "settings" => show_dashboard(app, "settings"),
             "quit" => app.exit(0),
@@ -97,7 +105,8 @@ fn setup_tray(app: &mut App) -> tauri::Result<()> {
                 ..
             } = event
             {
-                toggle_overlay(tray.app_handle());
+                let app_bg = tray.app_handle().clone();
+                std::thread::spawn(move || keymon::toggle_overlay_dictation(&app_bg));
             }
         })
         .build(app)?;
@@ -107,7 +116,6 @@ fn setup_tray(app: &mut App) -> tauri::Result<()> {
 
 fn setup_hotkeys(app: &mut App) -> tauri::Result<()> {
     let dashboard_shortcut: Shortcut = DASHBOARD_HOTKEY.parse().expect("valid hotkey");
-
     app.global_shortcut()
         .on_shortcut(dashboard_shortcut, move |app, _shortcut, event| {
             if event.state == ShortcutState::Pressed {
@@ -116,12 +124,29 @@ fn setup_hotkeys(app: &mut App) -> tauri::Result<()> {
         })
         .map_err(|e| tauri::Error::Anyhow(e.into()))?;
 
+    if let Ok(dictate_shortcut) = DICTATE_HOTKEY.parse::<Shortcut>() {
+        let _ = app
+            .global_shortcut()
+            .on_shortcut(dictate_shortcut, move |app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    let app_bg = app.clone();
+                    std::thread::spawn(move || keymon::toggle_overlay_dictation(&app_bg));
+                }
+            });
+    }
+
     Ok(())
 }
 
 #[tauri::command]
 async fn cancel_dictation(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     *state.dictation_active.lock().map_err(|e| e.to_string())? = false;
+    let tray_style = state
+        .store
+        .lock()
+        .map(|s| s.settings().tray_icon_style.clone())
+        .unwrap_or_else(|_| "monochrome".into());
+    tray_icons::apply_tray_style(&app, &tray_style, false);
     hide_overlay(&app);
     Ok(())
 }
@@ -150,6 +175,7 @@ pub fn run() {
 
             let store = config::Store::load(app_data_dir.clone())
                 .expect("failed to load store");
+            let initial_tray_style = store.settings().tray_icon_style.clone();
 
             let state = AppState {
                 store: Arc::new(Mutex::new(store)),
@@ -162,7 +188,7 @@ pub fn run() {
             };
             app.manage(state);
 
-            setup_tray(app)?;
+            setup_tray(app, &initial_tray_style)?;
             setup_hotkeys(app)?;
 
             // Start native Option-key monitor for hold-to-record
@@ -196,6 +222,8 @@ pub fn run() {
             commands::save_note,
             commands::delete_note,
             commands::check_permissions,
+            commands::open_accessibility_settings,
+            commands::open_mic_settings,
             commands::test_openai_key,
             commands::test_anthropic_key,
             commands::complete_onboarding,

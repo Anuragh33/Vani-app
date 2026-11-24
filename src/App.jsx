@@ -275,8 +275,14 @@ export default function App() {
       await refreshStatus();
     });
 
+    const onFocus = () => {
+      recheckPermissions();
+    };
+    window.addEventListener("focus", onFocus);
+
     return () => {
       mounted = false;
+      window.removeEventListener("focus", onFocus);
       offSettings?.();
       offSection?.();
       offHistory?.();

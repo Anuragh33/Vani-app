@@ -330,6 +330,8 @@ function createBrowserPreviewBridge() {
     },
 
     checkPermissions: async () => ({ microphone: "granted", accessibility: true }),
+    openAccessibilitySettings: async () => {},
+    openMicSettings: async () => {},
     completeOnboarding: async () => {
       settings.onboardingComplete = true;
     },
@@ -405,6 +407,8 @@ const tauriBridge = {
 
   // Permissions and onboarding
   checkPermissions: () => invoke("check_permissions"),
+  openAccessibilitySettings: () => invoke("open_accessibility_settings"),
+  openMicSettings: () => invoke("open_mic_settings"),
   completeOnboarding: () => invoke("complete_onboarding"),
 
   // API key testing

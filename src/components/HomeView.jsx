@@ -297,6 +297,28 @@ export default function HomeView({
         </div>
       </div>
 
+      {/* Accessibility permission warning so ⌥ Option Floating HUD & auto-paste work */}
+      {!permissions.accessibility && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/35 bg-[var(--amber-soft)] px-4 py-3">
+          <div className="flex items-center gap-2.5 text-sm text-[var(--amber)]">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>
+              Enable <strong>VANI</strong> in macOS <strong>Accessibility</strong> so holding{" "}
+              <kbd className="vani-kbd">⌥ Option</kbd> shows the Floating HUD and pastes into any app.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => window.vani?.openAccessibilitySettings?.()}
+              className="rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-[var(--amber)] hover:bg-amber-500/30"
+            >
+              Open Accessibility Settings
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Warning banner if local open-source model missing */}
       {settings.transcriptionProvider === "local" && !whisperStatus?.modelInstalled && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/35 bg-[var(--amber-soft)] px-4 py-3">

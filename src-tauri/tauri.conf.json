@@ -39,12 +39,7 @@
         "shadow": false,
         "url": "index.html?window=overlay"
       }
-    ],
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": false,
-      "tooltip": "VANI"
-    }
+    ]
   },
   "bundle": {
     "active": true,
