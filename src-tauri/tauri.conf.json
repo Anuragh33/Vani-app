@@ -1,0 +1,63 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "VANI",
+  "version": "2.0.0",
+  "identifier": "com.vani.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "dashboard",
+        "title": "VANI",
+        "width": 1100,
+        "height": 760,
+        "minWidth": 900,
+        "minHeight": 640,
+        "visible": false,
+        "decorations": true,
+        "resizable": true,
+        "url": "index.html?window=dashboard"
+      },
+      {
+        "label": "overlay",
+        "title": "",
+        "width": 320,
+        "height": 160,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "skipTaskbar": true,
+        "shadow": false,
+        "url": "index.html?window=overlay"
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": false,
+      "tooltip": "VANI"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png"
+    ],
+    "macOS": {
+      "entitlements": "entitlements.plist",
+      "infoPlist": "Info.plist",
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}
