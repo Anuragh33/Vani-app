@@ -12,8 +12,9 @@
 </p>
 
 <p align="center">
-  <strong>Best Offline Voice Dictation for Windows — with Full Apple On-Device AI on macOS.</strong><br/>
-  Hold <code>Right Alt</code> (Windows) or <code>⌥ Option</code> (macOS). Speak. Done.
+  <strong>VANI (वाणी — Sanskrit for <em>Voice</em>)</strong><br/>
+  <strong>Best Offline Voice Dictation &amp; Hands-Free Vani Actions for Windows — with Full Apple On-Device AI on macOS.</strong><br/>
+  Hold <code>Right Alt</code> / <code>⌥ Option</code> for Push-to-Talk, or tap <code>Right Alt + Ctrl</code> / <code>⌥ + ⌘</code> for true Hands-Free mode with auto-send.
 </p>
 
 <p align="center">
@@ -65,12 +66,13 @@ Most top local AI dictation apps are **Mac-only** — leaving Windows users with
 ## Highlights
 
 - **VANI Studio (`Ctrl+1` / `⌘1`)** — Live dictation playground with reactive Breathwave SVG waveform, Raw vs. Cleaned diff view, Privacy Shield toggle, and KPI strip.
+- **Hands-Free Vani Actions (`Ctrl+5` / `⌘5`)** — Tap **`Right Alt + Ctrl`** (Windows) or **`⌥ + ⌘`** (macOS) once for completely hands-free control: open desktop or web apps (*"Open Antigravity"*, *"Open Apple Music"*, *"Open ChatGPT"*, *"Open Claude"*), auto-focus chat inputs, and send messages directly without pressing Enter!
 - **Floating HUD & System Tray / Menu Bar Studio (`Ctrl+4` / `⌘4`)** — Live customizable overlay with 3 styles (`Breathwave`, `Equalizer Bars`, `Minimal Pill`), 4 screen positions, and 4 tray icon styles — with a live **Windows 11 taskbar** or **macOS menu bar** simulator matching your OS.
 - **Minimal HUD Flow** — Hold **`Right Alt`** / **`⌥ Option`** (waveform) → release (**`Transcribing…`** orbiting dots) → pastes directly at your cursor and disappears cleanly.
-- **Modes & Pipeline (`Ctrl+5` / `⌘5`)** — 5 context formatting modes (`General`, `Email`, `Slack`, `Notes`, `Code`) with an interactive pipeline simulator.
-- **Dictionary & Snippets (`Ctrl+6` / `⌘6`)** — Chip-based personal dictionary with domain starter packs + voice snippet triggers with a live expansion tester.
+- **Modes & Pipeline (`Ctrl+6` / `⌘6`)** — 5 context formatting modes (`General`, `Email`, `Slack`, `Notes`, `Code`) with an interactive pipeline simulator.
+- **Dictionary & Snippets (`Ctrl+7` / `⌘7`)** — Chip-based personal dictionary with domain starter packs + voice snippet triggers with a live expansion tester.
 - **Voice Notes (`Ctrl+3` / `⌘3`)** — Split-screen Markdown editor with inline voice dictation and `.md` export.
-- **History (`Ctrl+2` / `⌘2`) & Analytics (`Ctrl+8` / `⌘8`)** — Searchable date-grouped transcripts with Raw/Cleaned diffs, 7-day dictation chart, and an interactive Voice vs. Keyboard speed calculator.
+- **History (`Ctrl+2` / `⌘2`) & Analytics (`Ctrl+9` / `⌘9`)** — Searchable date-grouped transcripts with Raw/Cleaned diffs, 7-day dictation chart, and an interactive Voice vs. Keyboard speed calculator.
 - **Quick Command Palette (`Ctrl+K` / `⌘K`)** — Instant keyboard navigation and actions across the entire app.
 
 ---
