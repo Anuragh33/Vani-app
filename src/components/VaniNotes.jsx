@@ -85,8 +85,8 @@ export default function VaniNotes({ notes, systemInfo, onSaveNote, onDeleteNote,
     try {
       const arg =
         payload && typeof payload === "object" && ("wavPath" in payload || "wavBuffer" in payload)
-          ? payload
-          : { wavBuffer: payload || new ArrayBuffer(44) };
+          ? { ...payload, allowActions: false }
+          : { wavBuffer: payload || new ArrayBuffer(44), allowActions: false };
       const r = await window.vani?.dictationComplete?.(arg);
       if (r?.ok && r.text) {
         const target = activeNote || createEmptyNote();

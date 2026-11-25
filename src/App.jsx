@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   AlertCircle,
   PanelTop,
+  Zap,
 } from "lucide-react";
 import HomeView from "./components/HomeView";
 import HistoryView from "./components/HistoryView";
@@ -26,6 +27,7 @@ import DictionaryView from "./components/DictionaryView";
 import ModelsView from "./components/ModelsView";
 import UsageView from "./components/UsageView";
 import HudStudioView from "./components/HudStudioView";
+import VoiceActionsView from "./components/VoiceActionsView";
 import SettingsPanel from "./components/SettingsPanel";
 import Onboarding from "./components/Onboarding";
 import CommandPalette from "./components/CommandPalette";
@@ -99,6 +101,8 @@ const defaultSettings = {
   hudShowMode: true,
   hudGlass: true,
   trayIconStyle: "monochrome",
+  voiceActionsEnabled: true,
+  appAliases: [],
 };
 
 function buildNavGroups(sys) {
@@ -111,10 +115,11 @@ function buildNavGroups(sys) {
     ],
     workflow: [
       { key: "hud", label: sys.isMac ? "HUD & Menu Bar" : "HUD & System Tray", icon: PanelTop, shortcut: `${mod}4` },
-      { key: "modes", label: "Modes & Pipeline", icon: Sparkles, shortcut: `${mod}5` },
-      { key: "dictionary", label: "Dictionary & Snippets", icon: BookOpen, shortcut: `${mod}6` },
-      { key: "models", label: "Speech Models", icon: Cpu, shortcut: `${mod}7` },
-      { key: "usage", label: "Analytics", icon: BarChart3, shortcut: `${mod}8` },
+      { key: "actions", label: "Voice Actions", icon: Zap, shortcut: `${mod}5` },
+      { key: "modes", label: "Modes & Pipeline", icon: Sparkles, shortcut: `${mod}6` },
+      { key: "dictionary", label: "Dictionary & Snippets", icon: BookOpen, shortcut: `${mod}7` },
+      { key: "models", label: "Speech Models", icon: Cpu, shortcut: `${mod}8` },
+      { key: "usage", label: "Analytics", icon: BarChart3, shortcut: `${mod}9` },
     ],
   };
 }
@@ -366,8 +371,8 @@ export default function App() {
       } else if (k === ",") {
         e.preventDefault();
         setActive("settings");
-      } else if (k >= "1" && k <= "8") {
-        const keys = ["home", "history", "notes", "hud", "modes", "dictionary", "models", "usage"];
+      } else if (k >= "1" && k <= "9") {
+        const keys = ["home", "history", "notes", "hud", "actions", "modes", "dictionary", "models", "usage"];
         const target = keys[Number(k) - 1];
         if (target) {
           e.preventDefault();
@@ -532,6 +537,15 @@ export default function App() {
             systemInfo={systemInfo}
             onSaveSettings={saveSettings}
             onNavigate={setActive}
+            onNotify={notify}
+          />
+        );
+      case "actions":
+        return (
+          <VoiceActionsView
+            settings={settings}
+            systemInfo={systemInfo}
+            onSaveSettings={saveSettings}
             onNotify={notify}
           />
         );

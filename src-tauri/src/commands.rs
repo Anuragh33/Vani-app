@@ -239,6 +239,7 @@ pub async fn dictation_complete(
     app: AppHandle,
     wav_buffer: Option<Vec<u8>>,
     wav_path: Option<String>,
+    allow_actions: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     {
         let mut active = state.dictation_active.lock().map_err(|e| e.to_string())?;
@@ -388,6 +389,83 @@ pub async fn dictation_complete(
     // 2. Voice command detection
     if let Some(cmd) = cleanup::detect_voice_command(&raw_text) {
         return Ok(serde_json::json!({ "ok": true, "text": "", "command": cmd }));
+    }
+
+    // 2.5 Hands-Free Voice Actions ("open antigravity", "open antigravity and type ...", "start typing", "press enter")
+    let actions_allowed = allow_actions.unwrap_or(true) && settings.voice_actions_enabled;
+    if actions_allowed {
+        let aliases = settings.app_aliases.clone();
+        let raw_for_parse = raw_text.clone();
+        let parsed_action = tokio::task::spawn_blocking(move || {
+            let apps = crate::voice_actions::discover_installed_apps();
+            crate::voice_actions::parse_voice_action(&raw_for_parse, &apps, &aliases)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if let Some(mut action) = parsed_action {
+            // Polish any typed payload inside OpenAndType / StartTyping through the local pipeline
+            match &mut action {
+                crate::voice_actions::VoiceAction::OpenAndType { text, .. } if !text.is_empty() => {
+                    let mut cleaned_payload = if settings.filler_word_removal {
+                        cleanup::remove_filler_words(text)
+                    } else {
+                        text.clone()
+                    };
+                    if cfg!(target_os = "macos") && settings.cleanup_provider == "apple" {
+                        if let Ok(out) = apple_ai::polish_on_device(&app, &cleaned_payload, settings.cleanup_context.as_str()).await {
+                            cleaned_payload = out;
+                        }
+                    }
+                    *text = cleanup::substitute_snippets(&cleaned_payload, &settings.snippets);
+                }
+                crate::voice_actions::VoiceAction::StartTyping { text: Some(payload), .. } if !payload.is_empty() => {
+                    let mut cleaned_payload = if settings.filler_word_removal {
+                        cleanup::remove_filler_words(payload)
+                    } else {
+                        payload.clone()
+                    };
+                    if cfg!(target_os = "macos") && settings.cleanup_provider == "apple" {
+                        if let Ok(out) = apple_ai::polish_on_device(&app, &cleaned_payload, settings.cleanup_context.as_str()).await {
+                            cleaned_payload = out;
+                        }
+                    }
+                    *payload = cleanup::substitute_snippets(&cleaned_payload, &settings.snippets);
+                }
+                _ => {}
+            }
+
+            let frontmost = state
+                .frontmost_app
+                .lock()
+                .map_err(|e| e.to_string())?
+                .clone();
+
+            let exec = tokio::task::spawn_blocking(move || {
+                crate::voice_actions::execute_action(&action, frontmost.as_deref())
+            })
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+
+            if let Some(ref target) = exec.target_app {
+                if let Ok(mut fm) = state.frontmost_app.lock() {
+                    *fm = Some(target.clone());
+                }
+            }
+
+            return Ok(serde_json::json!({
+                "ok": true,
+                "text": "",
+                "rawText": raw_text,
+                "providerLabel": provider_label,
+                "actionExecuted": true,
+                "actionKind": exec.action_kind,
+                "actionSummary": exec.summary,
+                "followUpDictation": exec.follow_up_dictation,
+                "targetApp": exec.target_app
+            }));
+        }
     }
 
     // 3. Filler word removal
@@ -821,4 +899,61 @@ pub async fn open_models_dir(state: State<'_, AppState>) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     std::process::Command::new("xdg-open").arg(&dir).spawn().ok();
     Ok(())
+}
+
+#[tauri::command]
+pub async fn list_installed_apps() -> Result<Vec<crate::voice_actions::InstalledApp>, String> {
+    tokio::task::spawn_blocking(crate::voice_actions::discover_installed_apps)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn test_voice_action(
+    state: State<'_, AppState>,
+    phrase: String,
+    execute: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let aliases = {
+        let store = state.store.lock().map_err(|e| e.to_string())?;
+        store.settings().app_aliases.clone()
+    };
+    let should_exec = execute.unwrap_or(false);
+    let frontmost = state
+        .frontmost_app
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
+
+    tokio::task::spawn_blocking(move || {
+        let apps = crate::voice_actions::discover_installed_apps();
+        let parsed = crate::voice_actions::parse_voice_action(&phrase, &apps, &aliases);
+        match parsed {
+            None => Ok(serde_json::json!({
+                "matched": false,
+                "action": null,
+                "executed": false
+            })),
+            Some(action) => {
+                if should_exec {
+                    let exec = crate::voice_actions::execute_action(&action, frontmost.as_deref())
+                        .map_err(|e| e.to_string())?;
+                    Ok(serde_json::json!({
+                        "matched": true,
+                        "action": action,
+                        "executed": true,
+                        "result": exec
+                    }))
+                } else {
+                    Ok(serde_json::json!({
+                        "matched": true,
+                        "action": action,
+                        "executed": false
+                    }))
+                }
+            }
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }

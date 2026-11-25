@@ -148,3 +148,125 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
         Err(anyhow::anyhow!("clipboard not implemented"))
     }
 }
+
+#[cfg(target_os = "windows")]
+fn win_send_keys(keys: &[(u16, u32)]) {
+    use std::mem::size_of;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+    };
+    let inputs: Vec<INPUT> = keys
+        .iter()
+        .map(|&(vk, flags)| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: vk,
+                    wScan: 0,
+                    dwFlags: flags,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        })
+        .collect();
+    unsafe {
+        SendInput(
+            inputs.len() as u32,
+            inputs.as_ptr(),
+            size_of::<INPUT>() as i32,
+        );
+    }
+}
+
+pub fn send_enter() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to key code 36")
+            .status()?;
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{KEYEVENTF_KEYUP, VK_RETURN};
+        win_send_keys(&[(VK_RETURN, 0), (VK_RETURN, KEYEVENTF_KEYUP)]);
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    Ok(())
+}
+
+pub fn send_shift_enter() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to key code 36 using shift down")
+            .status()?;
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            KEYEVENTF_KEYUP, VK_RETURN, VK_SHIFT,
+        };
+        win_send_keys(&[
+            (VK_SHIFT, 0),
+            (VK_RETURN, 0),
+            (VK_RETURN, KEYEVENTF_KEYUP),
+            (VK_SHIFT, KEYEVENTF_KEYUP),
+        ]);
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    Ok(())
+}
+
+pub fn send_select_all() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to keystroke \"a\" using command down")
+            .status()?;
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            KEYEVENTF_KEYUP, VK_A, VK_CONTROL,
+        };
+        win_send_keys(&[
+            (VK_CONTROL, 0),
+            (VK_A, 0),
+            (VK_A, KEYEVENTF_KEYUP),
+            (VK_CONTROL, KEYEVENTF_KEYUP),
+        ]);
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    Ok(())
+}
+
+pub fn send_clear_input() -> Result<()> {
+    send_select_all()?;
+    std::thread::sleep(std::time::Duration::from_millis(60));
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to key code 51")
+            .status()?;
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{KEYEVENTF_KEYUP, VK_BACK};
+        win_send_keys(&[(VK_BACK, 0), (VK_BACK, KEYEVENTF_KEYUP)]);
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    Ok(())
+}

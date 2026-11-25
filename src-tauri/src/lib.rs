@@ -8,6 +8,7 @@ mod models;
 mod parakeet;
 mod transcribe;
 mod tray_icons;
+mod voice_actions;
 #[cfg(target_os = "windows")]
 mod win_audio;
 
@@ -279,6 +280,8 @@ pub fn run() {
             commands::import_parakeet_model,
             commands::append_history,
             commands::export_note,
+            commands::list_installed_apps,
+            commands::test_voice_action,
             cancel_dictation,
             toggle_dashboard_cmd,
             open_main_window,

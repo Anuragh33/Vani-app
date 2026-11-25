@@ -14,6 +14,7 @@ import {
   Shield,
   ArrowRight,
   PanelTop,
+  Zap,
 } from "lucide-react";
 
 export default function CommandPalette({
@@ -45,10 +46,11 @@ export default function CommandPalette({
       { id: "nav-history", group: "Navigate", label: "Transcription History", hint: `${mod}2`, icon: History, run: () => onNavigate("history") },
       { id: "nav-notes", group: "Navigate", label: "Voice Notes", hint: `${mod}3`, icon: FileText, run: () => onNavigate("notes") },
       { id: "nav-hud", group: "Navigate", label: isMac ? "HUD & Menu Bar Preview" : "HUD & System Tray Preview", hint: `${mod}4`, icon: PanelTop, run: () => onNavigate("hud") },
-      { id: "nav-modes", group: "Navigate", label: "Modes & Pipeline", hint: `${mod}5`, icon: Sparkles, run: () => onNavigate("modes") },
-      { id: "nav-dict", group: "Navigate", label: "Dictionary & Snippets", hint: `${mod}6`, icon: BookOpen, run: () => onNavigate("dictionary") },
-      { id: "nav-models", group: "Navigate", label: "Local Speech Models", hint: `${mod}7`, icon: Cpu, run: () => onNavigate("models") },
-      { id: "nav-usage", group: "Navigate", label: "Productivity & Analytics", hint: `${mod}8`, icon: BarChart3, run: () => onNavigate("usage") },
+      { id: "nav-actions", group: "Navigate", label: "Hands-Free Voice Actions", hint: `${mod}5`, icon: Zap, run: () => onNavigate("actions") },
+      { id: "nav-modes", group: "Navigate", label: "Modes & Pipeline", hint: `${mod}6`, icon: Sparkles, run: () => onNavigate("modes") },
+      { id: "nav-dict", group: "Navigate", label: "Dictionary & Snippets", hint: `${mod}7`, icon: BookOpen, run: () => onNavigate("dictionary") },
+      { id: "nav-models", group: "Navigate", label: "Local Speech Models", hint: `${mod}8`, icon: Cpu, run: () => onNavigate("models") },
+      { id: "nav-usage", group: "Navigate", label: "Productivity & Analytics", hint: `${mod}9`, icon: BarChart3, run: () => onNavigate("usage") },
       { id: "nav-settings", group: "Navigate", label: "Settings", hint: `${mod},`, icon: Settings, run: () => onNavigate("settings") },
       {
         id: "act-theme",

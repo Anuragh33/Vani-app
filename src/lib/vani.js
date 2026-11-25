@@ -107,6 +107,11 @@ function createBrowserPreviewBridge() {
     hudShowMode: true,
     hudGlass: true,
     trayIconStyle: "monochrome",
+    voiceActionsEnabled: true,
+    appAliases: [
+      { spoken: "editor", target: "Antigravity" },
+      { spoken: "browser", target: "Google Chrome" },
+    ],
   };
 
   let models = [
@@ -399,6 +404,86 @@ function createBrowserPreviewBridge() {
     testAnthropicKey: async (key) =>
       key?.startsWith("sk-ant-") ? { valid: true } : { valid: false, error: "Key should start with sk-ant-" },
 
+    listInstalledApps: async () =>
+      isMacPreview
+        ? [
+            { name: "Antigravity", path: "/Applications/Antigravity.app" },
+            { name: "Brave Browser", path: "/Applications/Brave Browser.app" },
+            { name: "ChatGPT", path: "/Applications/ChatGPT.app" },
+            { name: "Discord", path: "/Applications/Discord.app" },
+            { name: "Gemini", path: "/Applications/Gemini.app" },
+            { name: "Google Chrome", path: "/Applications/Google Chrome.app" },
+            { name: "Notes", path: "/System/Applications/Notes.app" },
+            { name: "Notion", path: "/Applications/Notion.app" },
+            { name: "Safari", path: "/Applications/Safari.app" },
+            { name: "Slack", path: "/Applications/Slack.app" },
+            { name: "Terminal", path: "/System/Applications/Utilities/Terminal.app" },
+            { name: "Visual Studio Code", path: "/Applications/Visual Studio Code.app" },
+            { name: "WhatsApp", path: "/Applications/WhatsApp.app" },
+          ]
+        : [
+            { name: "Antigravity", path: "Antigravity.lnk" },
+            { name: "Discord", path: "Discord.lnk" },
+            { name: "File Explorer", path: "explorer.exe" },
+            { name: "Google Chrome", path: "Google Chrome.lnk" },
+            { name: "Microsoft Edge", path: "msedge.exe" },
+            { name: "Notepad", path: "notepad.exe" },
+            { name: "Notion", path: "Notion.lnk" },
+            { name: "Slack", path: "Slack.lnk" },
+            { name: "Visual Studio Code", path: "Visual Studio Code.lnk" },
+            { name: "Windows Terminal", path: "wt.exe" },
+          ],
+    testVoiceAction: async (phrase, execute = false) => {
+      const lower = (phrase || "").trim().toLowerCase().replace(/[.!?]+$/, "");
+      const previewApps = isMacPreview
+        ? ["Antigravity", "Brave Browser", "ChatGPT", "Discord", "Gemini", "Google Chrome", "Notes", "Notion", "Safari", "Slack", "Terminal", "Visual Studio Code", "WhatsApp"]
+        : ["Antigravity", "Discord", "File Explorer", "Google Chrome", "Microsoft Edge", "Notepad", "Notion", "Slack", "Visual Studio Code", "Windows Terminal"];
+      const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const resolvePreviewApp = (q) => {
+        const nq = norm(q);
+        if (!nq) return null;
+        const aliasHit = (settings.appAliases || []).find((a) => norm(a.spoken) === nq);
+        if (aliasHit) return aliasHit.target;
+        const direct = previewApps.find((a) => norm(a) === nq || norm(a).startsWith(nq));
+        return direct || null;
+      };
+      if (["press enter", "hit enter", "send message", "send it"].includes(lower)) {
+        return { matched: true, action: { kind: "pressEnter" }, executed: execute, result: { ok: true, summary: "Pressed Enter" } };
+      }
+      if (["start typing", "start dictating", "focus chat"].includes(lower)) {
+        return { matched: true, action: { kind: "startTyping", text: null, pressEnter: false }, executed: execute, result: { ok: true, summary: "Focused input — start speaking", followUpDictation: true } };
+      }
+      if (lower.startsWith("start typing ")) {
+        const text = phrase.trim().slice("start typing ".length);
+        return { matched: true, action: { kind: "startTyping", text, pressEnter: false }, executed: execute, result: { ok: true, summary: "Typed into active input" } };
+      }
+      const mChain = lower.match(/^(?:open|launch|switch to|go to)\s+(.+?)\s+and\s+(?:start typing|type|say|ask|send|message)\s+(.+)$/i);
+      if (mChain) {
+        const appName = resolvePreviewApp(mChain[1]);
+        if (appName) {
+          return {
+            matched: true,
+            action: { kind: "openAndType", appName, appPath: "", text: mChain[2], pressEnter: lower.includes(" and send ") || lower.includes(" and ask ") },
+            executed: execute,
+            result: { ok: true, summary: `Opened ${appName} & typed` },
+          };
+        }
+      }
+      const mOpen = lower.match(/^(?:open|launch|switch to|go to)\s+([a-z0-9\s.-]+)$/i);
+      if (mOpen) {
+        const appName = resolvePreviewApp(mOpen[1]);
+        if (appName) {
+          return {
+            matched: true,
+            action: { kind: "openApp", appName, appPath: "" },
+            executed: execute,
+            result: { ok: true, summary: `Opened ${appName}` },
+          };
+        }
+      }
+      return { matched: false, action: null, executed: false };
+    },
+
     platform: isMacPreview ? "darwin" : "win32",
   };
 }
@@ -420,10 +505,11 @@ const tauriBridge = {
   startNativeRecording: () => invoke("start_native_recording"),
   stopNativeRecording: () => invoke("stop_native_recording"),
   cancelNativeRecording: () => invoke("cancel_native_recording"),
-  dictationComplete: ({ wavBuffer, wavPath }) =>
+  dictationComplete: ({ wavBuffer, wavPath, allowActions = true }) =>
     invoke("dictation_complete", {
       wavBuffer: wavBuffer ? Array.from(new Uint8Array(wavBuffer)) : null,
       wavPath: wavPath || null,
+      allowActions,
     }),
   cancelDictation: () => invoke("cancel_dictation"),
 
@@ -473,6 +559,10 @@ const tauriBridge = {
   // API key testing
   testOpenAIKey: (key) => invoke("test_openai_key", { key }),
   testAnthropicKey: (key) => invoke("test_anthropic_key", { key }),
+
+  // Hands-free Voice Actions
+  listInstalledApps: () => invoke("list_installed_apps"),
+  testVoiceAction: (phrase, execute = false) => invoke("test_voice_action", { phrase, execute }),
 
   platform: navigator.platform.toLowerCase().includes("mac")
     ? "darwin"

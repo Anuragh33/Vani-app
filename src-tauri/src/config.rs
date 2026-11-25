@@ -11,6 +11,13 @@ pub struct Snippet {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AppAlias {
+    pub spoken: String,
+    pub target: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Settings {
     #[serde(default = "default_language")]
     pub language: String,
@@ -64,6 +71,10 @@ pub struct Settings {
     pub hud_glass: bool,
     #[serde(default = "default_tray_icon_style")]
     pub tray_icon_style: String,
+    #[serde(default = "default_true")]
+    pub voice_actions_enabled: bool,
+    #[serde(default)]
+    pub app_aliases: Vec<AppAlias>,
 }
 
 fn default_language() -> String { "auto".into() }

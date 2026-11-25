@@ -432,6 +432,8 @@ export default function Overlay() {
   const autoHideRef = useRef(null);
   const clockRef = useRef(null);
   const startTsRef = useRef(0);
+  const recorderRef = useRef(null);
+  const [handsFreeMode, setHandsFreeMode] = useState(false);
 
   const stopClock = useCallback(() => {
     if (clockRef.current) {
@@ -490,26 +492,28 @@ export default function Overlay() {
   );
 
   const recorder = useRecorder({
-    enabledSilenceDetection: hudCfg.autoStopOnSilence,
+    enabledSilenceDetection: handsFreeMode || hudCfg.autoStopOnSilence,
     silenceDurationMs: hudCfg.silenceDurationMs,
     onStateChange: (recording) => {
       if (recording) setPhase("recording");
     },
     onError: (msg) => {
       stopClock();
+      setHandsFreeMode(false);
       setPhase("error");
       setText(msg || "Mic error");
       scheduleHide(2400);
     },
     onRecordingComplete: async (payload) => {
       stopClock();
+      setHandsFreeMode(false);
       setPhase("processing");
       setText("");
       try {
         const arg =
           payload && typeof payload === "object" && ("wavPath" in payload || "wavBuffer" in payload)
-            ? payload
-            : { wavBuffer: payload };
+            ? { ...payload, allowActions: true }
+            : { wavBuffer: payload, allowActions: true };
         const result = await window.vani?.dictationComplete?.(arg);
         if (!result?.ok) {
           if (!result?.error || result.error === "Nothing heard.") {
@@ -518,6 +522,22 @@ export default function Overlay() {
             setPhase("error");
             setText(result.error);
             scheduleHide(2000);
+          }
+          return;
+        }
+        if (result.actionExecuted) {
+          if (result.followUpDictation) {
+            // Hands-free "start typing" flow: keep pill open and immediately listen for dictation!
+            setHandsFreeMode(true);
+            setPhase("recording");
+            setElapsedMs(0);
+            startTsRef.current = Date.now();
+            stopClock();
+            clockRef.current = setInterval(() => setElapsedMs(Date.now() - startTsRef.current), 200);
+            setVisible(true);
+            setTimeout(() => recorderRef.current?.start?.(), 180);
+          } else {
+            scheduleHide(0);
           }
           return;
         }
@@ -538,6 +558,8 @@ export default function Overlay() {
       }
     },
   });
+
+  recorderRef.current = recorder;
 
   useEffect(() => {
     const offShown = window.vani?.onOverlayShown?.(() => {

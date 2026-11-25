@@ -416,6 +416,7 @@ export default function SettingsPanel({
               </div>
 
               {[
+                ["voiceActionsEnabled", "Hands-free Voice Actions", "Launch apps (“Open Antigravity”), focus chat (“Start typing”), and submit (“Press enter”) by voice."],
                 ["autoInject", "Auto-inject into active app", "Paste transcript directly at your cursor on release."],
                 ["autoStopOnSilence", "Auto-stop on silence", "Stop recording automatically when you finish speaking."],
                 ["fillerWordRemoval", "Remove filler words", "Clean out “um”, “uh”, and hesitations locally."],
