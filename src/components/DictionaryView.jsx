@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { BookOpen, Plus, X, Zap, Sparkles, ArrowRight, Search } from "lucide-react";
+import { BookOpen, Plus, X, Zap, ArrowRight, Search } from "lucide-react";
 
 const VOCAB_PACKS = [
   { label: "Apple & macOS", words: ["macOS", "Apple Silicon", "Xcode", "SwiftUI", "Tauri", "CoreAudio"] },
@@ -83,9 +83,9 @@ export default function DictionaryView({ settings, onSaveSettings, onNotify }) {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Dictionary &amp; Snippets</h1>
+        <h1 className="text-2xl font-medium tracking-[-0.02em] text-[var(--text)]">Dictionary &amp; snippets</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Teach VANI your jargon, names, and voice shortcuts so they transcribe accurately on the first try.
+          Add custom terms, names, and voice triggers so VANI transcribes them accurately on the first pass
         </p>
       </div>
 
@@ -93,15 +93,14 @@ export default function DictionaryView({ settings, onSaveSettings, onNotify }) {
         {/* Custom Vocabulary Card */}
         <div className="vani-card p-5 lg:col-span-6 flex flex-col gap-4">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
-                <BookOpen className="h-4 w-4" />
-              </div>
+            <div className="flex items-center gap-2.5">
+              <BookOpen className="h-4 w-4 text-[var(--muted)]" strokeWidth={1.5} />
               <div>
-                <h2 className="text-sm font-semibold text-[var(--text)]">Personal Dictionary</h2>
-                <p className="text-xs text-[var(--muted)]">Passed as Whisper initial prompt ({words.length} terms)</p>
+                <h2 className="text-sm font-medium text-[var(--text)]">Personal dictionary</h2>
+                <p className="text-xs text-[var(--muted)]">Passed as initial prompt to local speech models</p>
               </div>
             </div>
+            <span className="font-mono text-xs text-[var(--muted)] tabular-nums">{words.length}</span>
           </div>
 
           <div className="flex gap-2">
@@ -115,16 +114,17 @@ export default function DictionaryView({ settings, onSaveSettings, onNotify }) {
                   addWord();
                 }
               }}
-              placeholder="Add term or comma-separated list (e.g. VANI, CoreML)…"
+              placeholder="Add term or comma-separated list"
               className="vani-input flex-1 text-xs"
             />
             <button
               type="button"
               onClick={addWord}
               disabled={!wordInput.trim()}
-              className="vani-btn-primary inline-flex items-center gap-1 rounded-xl px-3.5 py-2 text-xs font-semibold"
+              className="vani-btn-primary inline-flex h-9 items-center gap-1 px-3.5 text-xs"
             >
-              <Plus className="h-3.5 w-3.5" /> Add
+              <Plus className="h-3.5 w-3.5" strokeWidth={1.75} />
+              Add
             </button>
           </div>
 
@@ -139,16 +139,16 @@ export default function DictionaryView({ settings, onSaveSettings, onNotify }) {
                 {words.map((word) => (
                   <span
                     key={word}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--text)]"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--text)]"
                   >
                     {word}
                     <button
                       type="button"
                       onClick={() => removeWord(word)}
-                      className="text-[var(--muted)] transition hover:text-[var(--danger)]"
+                      className="text-[var(--muted)] transition-colors hover:text-[var(--danger)]"
                       aria-label={`Remove ${word}`}
                     >
-                      <X className="h-3 w-3" />
+                      <X className="h-3 w-3" strokeWidth={1.5} />
                     </button>
                   </span>
                 ))}
@@ -158,16 +158,16 @@ export default function DictionaryView({ settings, onSaveSettings, onNotify }) {
 
           {/* Quick Packs */}
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Quick Starter Packs</p>
+            <p className="text-xs text-[var(--muted)]">Starter packs</p>
             <div className="flex flex-wrap gap-2">
               {VOCAB_PACKS.map((pack) => (
                 <button
                   key={pack.label}
                   type="button"
                   onClick={() => addPack(pack)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-soft)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand)]"
+                  className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-soft)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
                 >
-                  <Sparkles className="h-3 w-3" /> + {pack.label}
+                  + {pack.label}
                 </button>
               ))}
             </div>
@@ -177,18 +177,14 @@ export default function DictionaryView({ settings, onSaveSettings, onNotify }) {
         {/* Voice Snippets Card */}
         <div className="vani-card p-5 lg:col-span-6 flex flex-col gap-4">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--violet-soft)] text-[var(--violet)]">
-                <Zap className="h-4 w-4" />
-              </div>
+            <div className="flex items-center gap-2.5">
+              <Zap className="h-4 w-4 text-[var(--muted)]" strokeWidth={1.5} />
               <div>
-                <h2 className="text-sm font-semibold text-[var(--text)]">Voice Snippets</h2>
-                <p className="text-xs text-[var(--muted)]">Say a short trigger word to expand full text blocks</p>
+                <h2 className="text-sm font-medium text-[var(--text)]">Voice snippets</h2>
+                <p className="text-xs text-[var(--muted)]">Say a short trigger word to expand a full text block</p>
               </div>
             </div>
-            <span className="rounded-full bg-[var(--bg-elevated)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--muted)]">
-              {snippets.length} active
-            </span>
+            <span className="font-mono text-xs text-[var(--muted)] tabular-nums">{snippets.length}</span>
           </div>
 
           {/* Add new snippet */}
@@ -207,28 +203,28 @@ export default function DictionaryView({ settings, onSaveSettings, onNotify }) {
               onKeyDown={(e) => {
                 if (e.key === "Enter") addSnippet();
               }}
-              placeholder="Expansion text or link…"
+              placeholder="Expansion text or URL"
               className="vani-input text-xs"
             />
             <button
               type="button"
               onClick={addSnippet}
               disabled={!trigger.trim() || !expansion.trim()}
-              className="vani-btn-primary inline-flex items-center justify-center gap-1 rounded-xl px-3.5 py-2 text-xs font-semibold"
+              className="vani-btn-primary inline-flex h-9 items-center justify-center gap-1 px-3.5 text-xs"
             >
-              <Plus className="h-3.5 w-3.5" /> Add
+              <Plus className="h-3.5 w-3.5" strokeWidth={1.75} />
+              Add
             </button>
           </div>
 
-          {/* Search snippets */}
           {snippets.length > 3 && (
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" strokeWidth={1.5} />
               <input
                 type="search"
                 value={snippetSearch}
                 onChange={(e) => setSnippetSearch(e.target.value)}
-                placeholder="Filter snippets…"
+                placeholder="Search snippets"
                 className="vani-input pl-8 text-xs"
               />
             </div>
@@ -238,28 +234,28 @@ export default function DictionaryView({ settings, onSaveSettings, onNotify }) {
           <div className="max-h-[210px] space-y-2 overflow-y-auto pr-1">
             {filteredSnippets.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[var(--border)] py-7 text-center text-xs text-[var(--muted)]">
-                No snippets yet. Create one like <code className="text-[var(--brand)]">cal</code> → your booking link.
+                No snippets yet. Create one like <code className="font-mono text-[var(--text)]">cal</code> for a booking link.
               </div>
             ) : (
               filteredSnippets.map((s, idx) => (
                 <div
                   key={`${s.trigger}-${idx}`}
-                  className="group flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5"
+                  className="group flex items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2"
                 >
-                  <code className="shrink-0 rounded-md bg-[var(--brand-soft)] px-2 py-0.5 font-mono text-xs font-semibold text-[var(--brand)]">
+                  <code className="shrink-0 rounded border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-0.5 font-mono text-xs text-[var(--text)]">
                     {s.trigger}
                   </code>
-                  <ArrowRight className="h-3 w-3 shrink-0 text-[var(--muted)]" />
-                  <span className="min-w-0 flex-1 truncate text-xs text-[var(--text)]" title={s.expansion}>
+                  <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" strokeWidth={1.5} />
+                  <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-soft)]" title={s.expansion}>
                     {s.expansion}
                   </span>
                   <button
                     type="button"
                     onClick={() => removeSnippet(idx)}
-                    className="rounded-md p-1 text-[var(--muted)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                    className="rounded-md p-1 text-[var(--muted)] transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
                     aria-label={`Delete snippet ${s.trigger}`}
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <X className="h-3.5 w-3.5" strokeWidth={1.5} />
                   </button>
                 </div>
               ))
@@ -267,19 +263,17 @@ export default function DictionaryView({ settings, onSaveSettings, onNotify }) {
           </div>
 
           {/* Live Snippet Expansion Tester */}
-          <div className="mt-auto rounded-xl border border-[var(--border)] bg-[var(--bg-app)] p-3 space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-              Live Expansion Tester
-            </p>
+          <div className="mt-auto rounded-xl border border-[var(--border)] bg-[var(--bg-app)] p-3.5 space-y-2">
+            <p className="text-xs text-[var(--muted)]">Expansion tester</p>
             <input
               type="text"
               value={tester}
               onChange={(e) => setTester(e.target.value)}
-              placeholder={`Try typing “here is my ${snippets[0]?.trigger || "cal"} link”…`}
+              placeholder={`Try typing “here is my ${snippets[0]?.trigger || "cal"} link”`}
               className="vani-input text-xs"
             />
             {tester.trim() && (
-              <p className="whitespace-pre-wrap rounded-lg bg-[var(--bg-elevated)] px-3 py-2 text-xs text-[var(--emerald)]">
+              <p className="whitespace-pre-wrap rounded-lg bg-[var(--bg-elevated)] px-3 py-2 text-xs text-[var(--text)]">
                 {liveExpanded}
               </p>
             )}

@@ -217,13 +217,13 @@ export default function SettingsPanel({
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Settings</h1>
+        <h1 className="text-2xl font-medium tracking-[-0.02em] text-[var(--text)]">Settings</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Configure local speech inference, hotkeys, optional cloud APIs, and {osName} system permissions.
+          Configure local speech inference, hotkeys, optional cloud APIs, and {osName} permissions
         </p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[210px_1fr]">
+      <div className="grid gap-5 lg:grid-cols-[216px_1fr]">
         {/* Left Sub-Navigation */}
         <nav className="vani-card h-fit p-2 space-y-0.5">
           {TABS.map((item) => {
@@ -234,13 +234,16 @@ export default function SettingsPanel({
                 key={item.id}
                 type="button"
                 onClick={() => setTab(item.id)}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium transition ${
+                className={`flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-xs font-medium transition-colors ${
                   active
-                    ? "bg-[var(--bg-active)] text-[var(--brand)]"
+                    ? "bg-[var(--bg-active)] text-[var(--text)]"
                     : "text-[var(--muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
                 }`}
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                <Icon
+                  className={`h-4 w-4 shrink-0 ${active ? "text-[var(--brand)]" : "text-[var(--muted)]"}`}
+                  strokeWidth={1.5}
+                />
                 <span>{item.label}</span>
               </button>
             );
@@ -382,7 +385,7 @@ export default function SettingsPanel({
               </div>
 
               {/* Dedicated Hands-Free Mode Controls */}
-              <div className="rounded-xl border border-emerald-500/25 bg-[var(--bg-elevated)] p-4 space-y-3.5">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 space-y-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-[var(--text)]">Hands-Free Mode (Enter &amp; Exit)</p>

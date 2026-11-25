@@ -5,7 +5,6 @@ import {
   Check,
   FilePlus2,
   Trash2,
-  Sparkles,
   CornerDownLeft,
   Clock,
   Diff,
@@ -30,7 +29,7 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
   const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
   const pushToTalkKey = systemInfo?.pushToTalkKey || (isMac ? "⌥ Option" : "Right Alt");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all"); // all | local | cloud | injected | cleaned
+  const [filter, setFilter] = useState("all");
   const [rawMap, setRawMap] = useState({});
   const [copiedId, setCopiedId] = useState(null);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -73,9 +72,9 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Transcription History</h1>
+          <h1 className="text-2xl font-medium tracking-[-0.02em] text-[var(--text)]">History</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Every local dictation is searchable, diffable against raw Whisper output, and stored only on this {isMac ? "Mac" : "PC"}.
+            Searchable transcripts stored locally on this {isMac ? "Mac" : "PC"}
           </p>
         </div>
 
@@ -86,7 +85,7 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
                 <button
                   type="button"
                   onClick={() => setConfirmClear(false)}
-                  className="vani-btn-secondary rounded-xl px-3 py-1.5 text-xs font-semibold"
+                  className="vani-btn-secondary h-8 px-3 text-xs"
                 >
                   Cancel
                 </button>
@@ -97,18 +96,18 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
                     setConfirmClear(false);
                     onNotify?.("Cleared transcription history");
                   }}
-                  className="rounded-xl border border-red-500/40 bg-[var(--danger-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--danger)] hover:brightness-110"
+                  className="h-8 rounded-lg border border-[var(--danger)]/40 bg-[var(--danger-soft)] px-3 text-xs font-medium text-[var(--danger)]"
                 >
-                  Confirm Clear ({history.length})
+                  Confirm clear ({history.length})
                 </button>
               </>
             ) : (
               <button
                 type="button"
                 onClick={() => setConfirmClear(true)}
-                className="vani-btn-secondary inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-[var(--muted)] hover:text-[var(--danger)]"
+                className="vani-btn-secondary inline-flex h-8 items-center gap-1.5 px-3 text-xs text-[var(--muted)] hover:text-[var(--danger)]"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                 Clear all
               </button>
             )}
@@ -119,17 +118,20 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
       {/* Search & Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]"
+            strokeWidth={1.5}
+          />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search transcripts, phrases, or models…"
+            placeholder="Search transcripts"
             className="vani-input pl-9"
           />
         </div>
 
-        <div className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-1">
+        <div className="flex items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-0.5">
           {[
             ["all", "All"],
             ["local", "Local"],
@@ -140,9 +142,9 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
               key={key}
               type="button"
               onClick={() => setFilter(key)}
-              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                 filter === key
-                  ? "bg-[var(--brand-soft)] text-[var(--brand)]"
+                  ? "bg-[var(--bg-elevated)] text-[var(--text)]"
                   : "text-[var(--muted)] hover:text-[var(--text)]"
               }`}
             >
@@ -151,7 +153,7 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
           ))}
         </div>
 
-        <span className="text-xs text-[var(--muted)] tabular-nums">
+        <span className="font-mono text-xs text-[var(--muted)] tabular-nums">
           {filtered.length} / {history.length}
         </span>
       </div>
@@ -159,14 +161,14 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
       {/* Grouped Transcripts */}
       {grouped.length === 0 ? (
         <div className="vani-card flex flex-col items-center justify-center py-14 text-center">
-          <Clock className="h-8 w-8 text-[var(--muted-strong)]" />
+          <Clock className="h-6 w-6 text-[var(--muted-strong)]" strokeWidth={1.5} />
           <p className="mt-3 text-sm font-medium text-[var(--text)]">
             {history.length === 0 ? "No dictations yet" : "No matching transcripts"}
           </p>
           <p className="mt-1 text-xs text-[var(--muted)]">
             {history.length === 0
-              ? `Hold ${pushToTalkKey} anywhere or try the Voice Studio playground.`
-              : "Try clearing your search or switching filters."}
+              ? `Hold ${pushToTalkKey} anywhere or use VANI Studio`
+              : "Clear your search or switch filters"}
           </p>
         </div>
       ) : (
@@ -174,9 +176,11 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
           {grouped.map(([bucket, items]) => (
             <div key={bucket} className="space-y-2.5">
               <div className="flex items-center gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">{bucket}</p>
+                <p className="text-xs font-medium text-[var(--muted)]">{bucket}</p>
                 <div className="h-px flex-1 bg-[var(--border)]" />
-                <span className="text-[11px] text-[var(--muted-strong)]">{items.length}</span>
+                <span className="font-mono text-xs text-[var(--muted-strong)] tabular-nums">
+                  {items.length}
+                </span>
               </div>
 
               <div className="space-y-2.5">
@@ -189,30 +193,32 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
                   return (
                     <article
                       key={entry.id}
-                      className="vani-card p-4 transition hover:border-[var(--border-strong)]"
+                      className="vani-card p-4 transition-colors hover:border-[var(--border-strong)]"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                          <span className="font-mono text-[var(--muted)]">
+                        <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-[var(--muted)] tabular-nums">
+                          <span>
                             {new Date(entry.timestamp).toLocaleTimeString([], {
                               hour: "2-digit",
                               minute: "2-digit",
                             })}
                           </span>
-                          <span className="rounded-md bg-[var(--brand-soft)] px-2 py-0.5 font-mono text-[10px] font-medium text-[var(--brand)]">
-                            {entry.provider}
-                          </span>
+                          <span>·</span>
+                          <span className="text-[var(--text-soft)]">{entry.provider}</span>
                           {entry.injected && (
-                            <span className="rounded-md bg-[var(--emerald-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--emerald)]">
-                              Injected
-                            </span>
+                            <>
+                              <span>·</span>
+                              <span className="text-[var(--emerald)]">Injected</span>
+                            </>
                           )}
                           {hasDiff && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-[var(--violet-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--violet)]">
-                              <Sparkles className="h-2.5 w-2.5" /> Polished
-                            </span>
+                            <>
+                              <span>·</span>
+                              <span>Polished</span>
+                            </>
                           )}
-                          <span className="text-[var(--muted-strong)]">{words} words</span>
+                          <span>·</span>
+                          <span>{words} words</span>
                         </div>
 
                         <div className="flex items-center gap-1.5">
@@ -222,13 +228,13 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
                               onClick={() =>
                                 setRawMap((prev) => ({ ...prev, [entry.id]: !prev[entry.id] }))
                               }
-                              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition ${
+                              className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-xs font-medium transition-colors ${
                                 showingRaw
-                                  ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]"
+                                  ? "border-[var(--border-strong)] bg-[var(--bg-elevated)] text-[var(--text)]"
                                   : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)]"
                               }`}
                             >
-                              <Diff className="h-3 w-3" />
+                              <Diff className="h-3.5 w-3.5" strokeWidth={1.5} />
                               {showingRaw ? "Raw" : "Cleaned"}
                             </button>
                           )}
@@ -236,12 +242,12 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
                           <button
                             type="button"
                             onClick={() => copyText(entry.id, body)}
-                            className="vani-btn-secondary inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium"
+                            className="vani-btn-secondary inline-flex h-7 items-center gap-1 px-2 text-xs"
                           >
                             {copiedId === entry.id ? (
-                              <Check className="h-3 w-3 text-[var(--emerald)]" />
+                              <Check className="h-3.5 w-3.5 text-[var(--emerald)]" strokeWidth={1.5} />
                             ) : (
-                              <Copy className="h-3 w-3" />
+                              <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
                             )}
                             {copiedId === entry.id ? "Copied" : "Copy"}
                           </button>
@@ -249,10 +255,10 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
                           <button
                             type="button"
                             onClick={() => onSaveAsNote?.(body)}
-                            className="vani-btn-secondary inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium"
-                            title="Create a Note from this transcript"
+                            className="vani-btn-secondary inline-flex h-7 items-center gap-1 px-2 text-xs"
+                            title="Create a note from this transcript"
                           >
-                            <FilePlus2 className="h-3 w-3" />
+                            <FilePlus2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                             Note
                           </button>
 
@@ -260,10 +266,10 @@ export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote
                             <button
                               type="button"
                               onClick={() => onReinject(body)}
-                              className="vani-btn-secondary inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium"
+                              className="vani-btn-secondary inline-flex h-7 items-center gap-1 px-2 text-xs"
                               title="Paste into last active app"
                             >
-                              <CornerDownLeft className="h-3 w-3" />
+                              <CornerDownLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
                               Paste
                             </button>
                           )}

@@ -176,25 +176,30 @@ export default function VaniNotes({ notes, systemInfo, onSaveNote, onDeleteNote,
       <div className="vani-card flex flex-col overflow-hidden p-4">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-base font-bold text-[var(--text)]">Voice Notes</h1>
-            <p className="text-[11px] text-[var(--muted)]">{notes.length} note{notes.length === 1 ? "" : "s"}</p>
+            <h1 className="text-base font-medium text-[var(--text)]">Voice notes</h1>
+            <p className="font-mono text-[11px] text-[var(--muted)] tabular-nums">
+              {notes.length} note{notes.length === 1 ? "" : "s"}
+            </p>
           </div>
           <button
             type="button"
             onClick={createNote}
-            className="vani-btn-primary inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold"
+            className="vani-btn-primary inline-flex h-8 items-center gap-1 px-3 text-xs"
           >
-            <Plus className="h-3.5 w-3.5" /> New
+            <Plus className="h-3.5 w-3.5" strokeWidth={1.75} /> New
           </button>
         </div>
 
         <div className="relative mt-3">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" />
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]"
+            strokeWidth={1.5}
+          />
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search notes…"
+            placeholder="Search notes"
             className="vani-input pl-8 text-xs"
           />
         </div>
@@ -202,7 +207,7 @@ export default function VaniNotes({ notes, systemInfo, onSaveNote, onDeleteNote,
         <div className="mt-3 flex-1 space-y-2 overflow-y-auto pr-0.5">
           {filteredNotes.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[var(--border)] p-5 text-center text-xs text-[var(--muted)]">
-              No notes match. Click <strong>New</strong> or start dictating.
+              No notes match. Click New or start dictating.
             </div>
           ) : (
             filteredNotes.map((note) => {
@@ -210,10 +215,10 @@ export default function VaniNotes({ notes, systemInfo, onSaveNote, onDeleteNote,
               return (
                 <div
                   key={note.id}
-                  className={`group relative rounded-xl border transition ${
+                  className={`group relative rounded-lg border transition-colors ${
                     selected
-                      ? "border-[var(--brand)]/50 bg-[var(--bg-active)]"
-                      : "border-[var(--border)] bg-[var(--bg-elevated)] hover:border-[var(--border-strong)]"
+                      ? "border-[var(--border-strong)] bg-[var(--bg-elevated)]"
+                      : "border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)]"
                   }`}
                 >
                   <button
@@ -286,7 +291,7 @@ export default function VaniNotes({ notes, systemInfo, onSaveNote, onDeleteNote,
                 </button>
 
                 {/* View mode switcher */}
-                <div className="flex items-center rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
+                <div className="flex items-center rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
                   {[
                     ["edit", Edit3, "Write"],
                     ["split", Columns2, "Split"],
@@ -296,13 +301,13 @@ export default function VaniNotes({ notes, systemInfo, onSaveNote, onDeleteNote,
                       key={mode}
                       type="button"
                       onClick={() => setViewMode(mode)}
-                      className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition ${
+                      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
                         viewMode === mode
-                          ? "bg-[var(--brand-soft)] text-[var(--brand)]"
+                          ? "bg-[var(--bg-surface)] text-[var(--text)]"
                           : "text-[var(--muted)] hover:text-[var(--text)]"
                       }`}
                     >
-                      <Icon className="h-3 w-3" />
+                      <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />
                       {label}
                     </button>
                   ))}
@@ -311,29 +316,33 @@ export default function VaniNotes({ notes, systemInfo, onSaveNote, onDeleteNote,
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="vani-btn-secondary inline-flex items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-medium"
+                  className="vani-btn-secondary inline-flex h-8 items-center gap-1 px-2.5 text-xs"
                   title="Copy markdown"
                 >
-                  {copied ? <Check className="h-3.5 w-3.5 text-[var(--emerald)]" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copied ? (
+                    <Check className="h-3.5 w-3.5 text-[var(--emerald)]" strokeWidth={1.5} />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  )}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleExport("md")}
-                  className="vani-btn-secondary inline-flex items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-medium"
+                  className="vani-btn-secondary inline-flex h-8 items-center gap-1 px-2.5 text-xs"
                   title="Export Markdown to Downloads"
                 >
-                  <Download className="h-3.5 w-3.5" /> .md
+                  <Download className="h-3.5 w-3.5" strokeWidth={1.5} /> .md
                 </button>
               </div>
             </div>
 
             {/* Live Dictation Strip when recording */}
             {dictating && (
-              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[var(--brand)]/35 bg-[var(--bg-app)] px-4 py-2.5 animate-scale-in">
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-app)] px-4 py-2.5 animate-scale-in">
                 <div className="flex items-center gap-2.5">
-                  <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-pink-500" />
-                  <span className="text-xs font-medium text-[var(--text)]">Listening for note dictation…</span>
+                  <span className="h-2 w-2 rounded-full bg-[var(--brand)]" />
+                  <span className="text-xs font-medium text-[var(--text)]">Listening for note dictation</span>
                 </div>
                 <LiveWaveform levels={recorder.levels} active simulate={simMic} width={160} height={26} />
               </div>

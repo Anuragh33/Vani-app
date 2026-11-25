@@ -6,24 +6,21 @@ import {
   FolderOpen,
   Cpu,
   Upload,
-  Sparkles,
   Globe,
-  Gauge,
-  Target,
   X,
 } from "lucide-react";
 
 const MODEL_META = {
-  "ggml-base.en": { speed: 5, accuracy: 3, recommended: true, note: "Best starter — ultra-fast English dictation" },
-  "ggml-base": { speed: 5, accuracy: 3, note: "Fast lightweight multilingual model" },
+  "ggml-base.en": { speed: 5, accuracy: 3, recommended: true, note: "Fast English starter model" },
+  "ggml-base": { speed: 5, accuracy: 3, note: "Lightweight multilingual model" },
   "ggml-small.en": { speed: 4, accuracy: 4, note: "Strong everyday English accuracy" },
-  "ggml-small": { speed: 4, accuracy: 4, note: "Balanced multilingual speed & quality" },
-  "ggml-medium.en": { speed: 3, accuracy: 4, note: "High-precision English for technical speech" },
+  "ggml-small": { speed: 4, accuracy: 4, note: "Balanced multilingual speed and quality" },
+  "ggml-medium.en": { speed: 3, accuracy: 4, note: "High-precision English for technical terms" },
   "ggml-medium": { speed: 3, accuracy: 4, note: "High-precision multilingual transcription" },
-  "ggml-large-v3-turbo": { speed: 4, accuracy: 5, recommended: true, note: "Best quality-to-speed ratio across 99 languages" },
+  "ggml-large-v3-turbo": { speed: 4, accuracy: 5, recommended: true, note: "Best quality-to-speed across 99 languages" },
   "ggml-large-v3": { speed: 2, accuracy: 5, note: "Maximum transcription fidelity" },
-  "parakeet-tdt-0.6b-v2": { speed: 5, accuracy: 5, note: "NVIDIA TDT ONNX — blazing fast English ASR" },
-  "parakeet-tdt-1.1b-v2": { speed: 4, accuracy: 5, note: "NVIDIA flagship 1.1B English ONNX model" },
+  "parakeet-tdt-0.6b-v2": { speed: 5, accuracy: 5, note: "NVIDIA TDT ONNX English ASR" },
+  "parakeet-tdt-1.1b-v2": { speed: 4, accuracy: 5, note: "NVIDIA 1.1B English ONNX model" },
 };
 
 function formatBytes(n) {
@@ -38,14 +35,18 @@ function formatBytes(n) {
   return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[i]}`;
 }
 
-function MeterBar({ level, max = 5, colorClass = "bg-[var(--brand)]" }) {
+function MeterBar({ level, max = 5, accent = false }) {
   return (
     <div className="flex items-center gap-0.5">
       {Array.from({ length: max }, (_, idx) => (
         <span
           key={idx}
-          className={`h-1.5 w-3 rounded-full transition-colors ${
-            idx < level ? colorClass : "bg-[var(--border-strong)]"
+          className={`h-1.5 w-3 rounded-sm ${
+            idx < level
+              ? accent
+                ? "bg-[var(--brand)]"
+                : "bg-[var(--text-soft)]"
+              : "bg-[var(--border-strong)]"
           }`}
         />
       ))}
@@ -70,7 +71,7 @@ export default function ModelsView({
   onNotify,
   error,
 }) {
-  const [filter, setFilter] = useState("all"); // all | installed | whisper | parakeet | multilingual
+  const [filter, setFilter] = useState("all");
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
@@ -92,193 +93,174 @@ export default function ModelsView({
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">
-            {isMac ? "AI & Speech Models" : "Speech Models"}
+          <h1 className="text-2xl font-medium tracking-[-0.02em] text-[var(--text)]">
+            {isMac ? "AI & speech models" : "Speech models"}
           </h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            {isMac ? (
-              <>
-                Use macOS’s built-in <strong>Apple On-Device AI</strong> with zero downloads — or run open-source{" "}
-                <code className="font-mono text-xs text-[var(--brand)]">Whisper (Metal GPU)</code> and{" "}
-                <code className="font-mono text-xs text-[var(--violet)]">NVIDIA Parakeet ONNX</code> locally.
-              </>
-            ) : (
-              <>
-                Run open-source{" "}
-                <code className="font-mono text-xs text-[var(--brand)]">Whisper GGML</code> and{" "}
-                <code className="font-mono text-xs text-[var(--violet)]">NVIDIA Parakeet ONNX</code> speech models
-                100% locally on {systemInfo?.osName || "Windows"}.
-              </>
-            )}
+            {isMac
+              ? "Use macOS Apple On-Device AI with zero downloads, or run open-source Whisper (Metal GPU) and NVIDIA Parakeet ONNX locally"
+              : `Run open-source Whisper GGML and NVIDIA Parakeet ONNX locally on ${systemInfo?.osName || "Windows"}`}
           </p>
         </div>
 
         <button
           type="button"
           onClick={onOpenModelsDir}
-          className="vani-btn-secondary inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold"
+          className="vani-btn-secondary inline-flex h-9 items-center gap-2 px-3 text-xs"
         >
-          <FolderOpen className="h-3.5 w-3.5" />
-          Open Models Folder
+          <FolderOpen className="h-4 w-4 text-[var(--muted)]" strokeWidth={1.5} />
+          <span>Open models folder</span>
         </button>
       </div>
 
       {/* Built-in Apple On-Device AI Section — macOS ONLY (completely hidden on Windows/Linux) */}
       {isMac && (
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand)]">
-            Apple On-Device AI · Built into macOS (Zero Downloads)
-          </p>
-          {appleAi?.macosVersion && (
-            <span className="font-mono text-[11px] text-[var(--muted)]">macOS {appleAi.macosVersion}</span>
-          )}
-        </div>
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-[var(--text-soft)]">
+              Apple On-Device AI · Built into macOS
+            </p>
+            {appleAi?.macosVersion && (
+              <span className="font-mono text-xs text-[var(--muted)]">macOS {appleAi.macosVersion}</span>
+            )}
+          </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
-          {/* Apple SpeechAnalyzer Card */}
-          <div
-            className={`vani-card p-4 transition ${
-              usingAppleStt ? "border-[var(--brand)] shadow-[0_0_0_1px_var(--brand-ring)]" : ""
-            }`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-base font-bold text-[var(--brand)]">
-                  
-                </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Apple SpeechAnalyzer Card */}
+            <div
+              className={`vani-card p-5 transition-colors ${
+                usingAppleStt ? "border-[var(--border-strong)] bg-[var(--bg-elevated)]" : ""
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <p className="text-sm font-semibold text-[var(--text)]">Apple SpeechAnalyzer</p>
+                  <div className="flex items-center gap-2.5">
+                    <p className="text-sm font-medium text-[var(--text)]">Apple SpeechAnalyzer</p>
                     {usingAppleStt && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--emerald-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase text-[var(--emerald)]">
-                        <Check className="h-2.5 w-2.5" /> Active STT
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-[var(--emerald)]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[var(--emerald)]" />
+                        Active STT
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-xs text-[var(--muted)]">
-                    Zero-download on-device macOS speech recognition with Neural Engine acceleration.
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
+                    Zero-download on-device macOS speech recognition with Neural Engine acceleration
                   </p>
                 </div>
               </div>
-            </div>
-            <div className="mt-3.5 flex items-center justify-between border-t border-[var(--border)] pt-3">
-              <span
-                className={`text-[11px] font-medium ${
-                  appleAi?.speechAnalyzerAvailable ? "text-[var(--emerald)]" : "text-[var(--amber)]"
-                }`}
-              >
-                {appleAi?.speechAnalyzerAvailable ? "Available on this Mac" : "Requires macOS 26+"}
-              </span>
-              {usingAppleStt ? (
-                <span className="text-xs font-semibold text-[var(--brand)]">Selected</span>
-              ) : (
-                <button
-                  type="button"
-                  disabled={!appleAi?.speechAnalyzerAvailable}
-                  onClick={() => {
-                    onSaveSettings?.({ transcriptionProvider: "apple" });
-                    onNotify?.("Switched Speech-to-Text to Apple On-Device SpeechAnalyzer");
-                  }}
-                  className="vani-btn-primary rounded-xl px-3 py-1.5 text-xs font-semibold"
+              <div className="mt-4 flex items-center justify-between border-t border-[var(--border)] pt-3">
+                <span
+                  className={`text-xs ${
+                    appleAi?.speechAnalyzerAvailable ? "text-[var(--emerald)]" : "text-[var(--amber)]"
+                  }`}
                 >
-                  Use Apple Speech
-                </button>
-              )}
+                  {appleAi?.speechAnalyzerAvailable ? "Available on this Mac" : "Requires macOS 26+"}
+                </span>
+                {usingAppleStt ? (
+                  <span className="font-mono text-xs text-[var(--text-soft)]">Selected</span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!appleAi?.speechAnalyzerAvailable}
+                    onClick={() => {
+                      onSaveSettings?.({ transcriptionProvider: "apple" });
+                      onNotify?.("Switched Speech-to-Text to Apple On-Device SpeechAnalyzer");
+                    }}
+                    className="vani-btn-primary h-8 px-3 text-xs"
+                  >
+                    Use Apple Speech
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Apple FoundationModels Card */}
-          <div
-            className={`vani-card p-4 transition ${
-              usingApplePolish ? "border-[var(--violet)] shadow-[0_0_0_1px_rgba(167,139,250,0.3)]" : ""
-            }`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--violet-soft)] text-[var(--violet)]">
-                  <Sparkles className="h-5 w-5" />
-                </div>
+            {/* Apple FoundationModels Card */}
+            <div
+              className={`vani-card p-5 transition-colors ${
+                usingApplePolish ? "border-[var(--border-strong)] bg-[var(--bg-elevated)]" : ""
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <p className="text-sm font-semibold text-[var(--text)]">Apple Foundation Model</p>
+                  <div className="flex items-center gap-2.5">
+                    <p className="text-sm font-medium text-[var(--text)]">Apple Foundation Model</p>
                     {usingApplePolish && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--emerald-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase text-[var(--emerald)]">
-                        <Check className="h-2.5 w-2.5" /> Active Polish
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-[var(--emerald)]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[var(--emerald)]" />
+                        Active polish
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-xs text-[var(--muted)]">
-                    On-device Apple Intelligence LLM for Email, Slack, Notes &amp; Code cleanup — zero API keys.
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
+                    On-device Apple Intelligence model for Email, Slack, Notes, and Code formatting
                   </p>
                 </div>
               </div>
-            </div>
-            <div className="mt-3.5 flex items-center justify-between border-t border-[var(--border)] pt-3">
-              <span
-                className={`text-[11px] font-medium ${
-                  appleAi?.foundationModelAvailable ? "text-[var(--emerald)]" : "text-[var(--amber)]"
-                }`}
-              >
-                {appleAi?.foundationModelAvailable
-                  ? "Ready on this MacBook"
-                  : appleAi?.foundationModelReason || "Requires Apple Intelligence"}
-              </span>
-              {usingApplePolish ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSaveSettings?.({ cleanupProvider: "none" });
-                    onNotify?.("Switched text cleanup to Local Rules Only");
-                  }}
-                  className="vani-btn-secondary rounded-xl px-3 py-1.5 text-xs font-semibold"
+              <div className="mt-4 flex items-center justify-between border-t border-[var(--border)] pt-3">
+                <span
+                  className={`text-xs ${
+                    appleAi?.foundationModelAvailable ? "text-[var(--emerald)]" : "text-[var(--amber)]"
+                  }`}
                 >
-                  Disable
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={!appleAi?.foundationModelAvailable}
-                  onClick={() => {
-                    onSaveSettings?.({ cleanupProvider: "apple" });
-                    onNotify?.("Enabled Apple Foundation Model on-device polish");
-                  }}
-                  className="vani-btn-primary rounded-xl px-3 py-1.5 text-xs font-semibold"
-                >
-                  Use Apple LLM
-                </button>
-              )}
+                  {appleAi?.foundationModelAvailable
+                    ? "Ready on this Mac"
+                    : appleAi?.foundationModelReason || "Requires Apple Intelligence"}
+                </span>
+                {usingApplePolish ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSaveSettings?.({ cleanupProvider: "none" });
+                      onNotify?.("Switched text cleanup to Local rules only");
+                    }}
+                    className="vani-btn-secondary h-8 px-3 text-xs"
+                  >
+                    Disable
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!appleAi?.foundationModelAvailable}
+                    onClick={() => {
+                      onSaveSettings?.({ cleanupProvider: "apple" });
+                      onNotify?.("Enabled Apple Foundation Model on-device polish");
+                    }}
+                    className="vani-btn-primary h-8 px-3 text-xs"
+                  >
+                    Use Apple LLM
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
       )}
 
-      {/* Summary Strip for Open-Source Models */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="vani-card p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Active Speech Engine</p>
-          <p className="mt-1.5 truncate text-sm font-semibold text-[var(--text)]">
+      {/* Summary Strip */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="vani-card p-5">
+          <p className="text-xs text-[var(--muted)]">Active speech engine</p>
+          <p className="mt-1.5 truncate text-base font-medium text-[var(--text)]">
             {usingAppleStt
               ? "Apple SpeechAnalyzer"
               : (models || []).find((m) => m.id === activeModel)?.name || activeModel}
           </p>
-          <p className="mt-0.5 font-mono text-[11px] text-[var(--brand)]">
-            {usingAppleStt ? "macOS On-Device" : activeModel}
+          <p className="mt-0.5 font-mono text-xs text-[var(--muted)]">
+            {usingAppleStt ? "macOS on-device" : activeModel}
           </p>
         </div>
-        <div className="vani-card p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Open-Source Downloaded</p>
-          <p className="mt-1.5 text-sm font-semibold text-[var(--text)]">
-            {installedModels.length} of {(models || []).length} models
+        <div className="vani-card p-5">
+          <p className="text-xs text-[var(--muted)]">Open-source downloaded</p>
+          <p className="mt-1.5 font-mono text-base font-medium text-[var(--text)] tabular-nums">
+            {installedModels.length} / {(models || []).length} models
           </p>
-          <p className="mt-0.5 text-xs text-[var(--muted)]">Whisper GGML + Parakeet ONNX</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">Whisper GGML and Parakeet ONNX</p>
         </div>
-        <div className="vani-card p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-            {isMac ? "Acceleration" : "Inference Runtime"}
+        <div className="vani-card p-5">
+          <p className="text-xs text-[var(--muted)]">
+            {isMac ? "Acceleration" : "Inference runtime"}
           </p>
-          <p className="mt-1.5 text-sm font-semibold text-[var(--emerald)]">
+          <p className="mt-1.5 text-base font-medium text-[var(--text)]">
             {isMac ? "Metal GPU + Neural Engine" : "whisper-rs + ONNX Runtime"}
           </p>
           <p className="mt-0.5 text-xs text-[var(--muted)]">
@@ -289,7 +271,7 @@ export default function ModelsView({
 
       {/* Filter Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-1">
+        <div className="flex flex-wrap items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-0.5">
           {[
             ["all", `All (${(models || []).length})`],
             ["installed", `Installed (${installedModels.length})`],
@@ -301,9 +283,9 @@ export default function ModelsView({
               key={key}
               type="button"
               onClick={() => setFilter(key)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                 filter === key
-                  ? "bg-[var(--brand-soft)] text-[var(--brand)]"
+                  ? "bg-[var(--bg-elevated)] text-[var(--text)]"
                   : "text-[var(--muted)] hover:text-[var(--text)]"
               }`}
             >
@@ -314,12 +296,12 @@ export default function ModelsView({
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/35 bg-[var(--danger-soft)] px-4 py-3 text-xs text-[var(--danger)]">
+        <div className="rounded-xl border border-[var(--danger)]/35 bg-[var(--danger-soft)] px-4 py-3 text-xs text-[var(--danger)]">
           {error}
         </div>
       )}
 
-      {/* Model Cards — 1 col on compact, 2 cols on wide/fullscreen */}
+      {/* Model Cards */}
       <div className="grid gap-3 xl:grid-cols-2">
         {filteredModels.map((model) => {
           const dl = downloads?.[model.id];
@@ -331,57 +313,49 @@ export default function ModelsView({
           return (
             <div
               key={model.id}
-              className={`vani-card p-4 transition ${
-                isActive ? "border-[var(--brand)] shadow-[0_0_0_1px_var(--brand-ring)]" : "hover:border-[var(--border-strong)]"
+              className={`vani-card p-4 transition-colors ${
+                isActive
+                  ? "border-[var(--border-strong)] bg-[var(--bg-elevated)]"
+                  : "hover:border-[var(--border-strong)]"
               }`}
             >
               <div className="flex flex-wrap items-center gap-4">
-                <div
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${
-                    isParakeet
-                      ? "bg-[var(--violet-soft)] text-[var(--violet)]"
-                      : "bg-[var(--brand-soft)] text-[var(--brand)]"
-                  }`}
-                >
-                  {isParakeet ? "NV" : model.multilingual ? <Globe className="h-5 w-5" /> : "EN"}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg-app)] font-mono text-xs font-medium text-[var(--text-soft)]">
+                  {isParakeet ? "NV" : model.multilingual ? <Globe className="h-4 w-4" strokeWidth={1.5} /> : "EN"}
                 </div>
 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold text-[var(--text)]">{model.name}</p>
+                    <p className="text-sm font-medium text-[var(--text)]">{model.name}</p>
                     {meta.recommended && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--brand)]">
-                        <Sparkles className="h-2.5 w-2.5" /> Recommended
-                      </span>
+                      <span className="font-mono text-[11px] text-[var(--brand)]">Recommended</span>
                     )}
                     {isParakeet && (
-                      <span className="rounded-full bg-[var(--violet-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--violet)]">
-                        Parakeet ONNX
-                      </span>
+                      <span className="font-mono text-[11px] text-[var(--muted)]">ONNX</span>
                     )}
                     {isActive && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--emerald-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--emerald)]">
-                        <Check className="h-2.5 w-2.5" /> Active
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-[var(--emerald)]">
+                        <Check className="h-3 w-3" strokeWidth={1.75} />
+                        Active
                       </span>
                     )}
                   </div>
 
                   <p className="mt-0.5 text-xs text-[var(--muted)]">
-                    {meta.note || (model.multilingual ? "99 languages supported" : "English-optimized")} ·{" "}
-                    <span className="font-mono">{model.size}</span> · {model.params} params
+                    {meta.note || (model.multilingual ? "99 languages" : "English")} ·{" "}
+                    <span className="font-mono tabular-nums">{model.size}</span> ·{" "}
+                    <span className="font-mono tabular-nums">{model.params}</span>
                   </p>
 
                   {/* Speed & Accuracy Rating Meters */}
                   <div className="mt-2.5 flex flex-wrap items-center gap-5 text-[11px] text-[var(--muted)]">
                     <div className="flex items-center gap-2">
-                      <Gauge className="h-3 w-3 text-[var(--emerald)]" />
                       <span>Speed</span>
-                      <MeterBar level={meta.speed} colorClass="bg-[var(--emerald)]" />
+                      <MeterBar level={meta.speed} />
                     </div>
                     <div className="flex items-center gap-2">
-                      <Target className="h-3 w-3 text-[var(--brand)]" />
                       <span>Accuracy</span>
-                      <MeterBar level={meta.accuracy} colorClass="bg-[var(--brand)]" />
+                      <MeterBar level={meta.accuracy} accent={isActive} />
                     </div>
                   </div>
                 </div>
@@ -393,18 +367,18 @@ export default function ModelsView({
                       <button
                         type="button"
                         onClick={() => onImport(model.id)}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--violet-soft)] px-3.5 py-2 text-xs font-semibold text-[var(--violet)] transition hover:brightness-110"
+                        className="vani-btn-secondary inline-flex h-8 items-center gap-1.5 px-3 text-xs"
                       >
-                        <Upload className="h-3.5 w-3.5" />
+                        <Upload className="h-3.5 w-3.5" strokeWidth={1.5} />
                         Import .onnx
                       </button>
                     ) : (
                       <button
                         type="button"
                         onClick={() => onDownload(model.id)}
-                        className="vani-btn-primary inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold"
+                        className="vani-btn-primary inline-flex h-8 items-center gap-1.5 px-3 text-xs"
                       >
-                        <Download className="h-3.5 w-3.5" />
+                        <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
                         Download
                       </button>
                     )
@@ -414,9 +388,9 @@ export default function ModelsView({
                     <button
                       type="button"
                       onClick={() => onCancel(model.id)}
-                      className="vani-btn-secondary inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold"
+                      className="vani-btn-secondary inline-flex h-8 items-center gap-1 px-3 text-xs"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="h-3.5 w-3.5" strokeWidth={1.5} />
                       Cancel
                     </button>
                   )}
@@ -425,10 +399,10 @@ export default function ModelsView({
                     <button
                       type="button"
                       onClick={() => onSetActive(model.id)}
-                      className="vani-btn-primary inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold"
+                      className="vani-btn-primary inline-flex h-8 items-center gap-1.5 px-3 text-xs"
                     >
-                      <Cpu className="h-3.5 w-3.5" />
-                      Use Model
+                      <Cpu className="h-3.5 w-3.5" strokeWidth={1.75} />
+                      Use model
                     </button>
                   )}
 
@@ -441,14 +415,14 @@ export default function ModelsView({
                             onDelete(model.id);
                             setConfirmDeleteId(null);
                           }}
-                          className="rounded-xl border border-red-500/40 bg-[var(--danger-soft)] px-2.5 py-2 text-xs font-semibold text-[var(--danger)]"
+                          className="h-8 rounded-lg border border-[var(--danger)]/40 bg-[var(--danger-soft)] px-2.5 text-xs font-medium text-[var(--danger)]"
                         >
                           Remove
                         </button>
                         <button
                           type="button"
                           onClick={() => setConfirmDeleteId(null)}
-                          className="vani-btn-secondary rounded-xl px-2 py-2 text-xs"
+                          className="vani-btn-secondary h-8 px-2 text-xs"
                         >
                           Cancel
                         </button>
@@ -457,10 +431,10 @@ export default function ModelsView({
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteId(model.id)}
-                        className="vani-btn-secondary rounded-xl p-2 text-[var(--muted)] hover:text-[var(--danger)]"
+                        className="vani-btn-secondary grid h-8 w-8 place-items-center text-[var(--muted)] hover:text-[var(--danger)]"
                         title="Delete model from disk"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                       </button>
                     )
                   )}
@@ -469,16 +443,16 @@ export default function ModelsView({
 
               {/* Live download bar */}
               {dl && (
-                <div className="mt-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-app)] p-3">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-medium text-[var(--text)]">Downloading from Hugging Face…</span>
-                    <span className="font-mono tabular-nums text-[var(--brand)]">
+                <div className="mt-3.5 rounded-lg border border-[var(--border)] bg-[var(--bg-app)] p-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[var(--text)]">Downloading</span>
+                    <span className="font-mono tabular-nums text-[var(--muted)]">
                       {formatBytes(dl.received)} / {dl.total ? formatBytes(dl.total) : "?"} ({progress.toFixed(0)}%)
                     </span>
                   </div>
-                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--bg-elevated)]">
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-elevated)]">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-[var(--brand)] to-[var(--brand-3)] transition-[width] duration-200"
+                      className="h-full rounded-full bg-[var(--brand)] transition-[width] duration-200"
                       style={{ width: `${Math.max(4, progress)}%` }}
                     />
                   </div>
