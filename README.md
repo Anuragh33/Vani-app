@@ -120,4 +120,4 @@ npm run dev
 
 ---
 
-<p align="center">Made by <a href="https://github.com/Anuragh33">Anurag</a></p>
+<p align="center">Made by <a href="https://github.com/Anuragh33">Anuragh</a></p>
