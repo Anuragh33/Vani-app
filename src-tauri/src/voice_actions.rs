@@ -47,6 +47,14 @@ pub enum VoiceAction {
         url: String,
         query: String,
     },
+    OpenSettingsPane {
+        pane_name: String,
+        target_uri: String,
+    },
+    OpenFolder {
+        folder_name: String,
+        folder_path: String,
+    },
     StopHandsFree,
     PressEnter,
     NewLine,
@@ -616,6 +624,584 @@ fn strip_search_verb(raw: &str) -> String {
     s.to_string()
 }
 
+/// Cross-platform System Settings deep links:
+/// `(display_name, macos_uri, windows_uri, spoken_aliases)`.
+fn settings_panes() -> &'static [(&'static str, &'static str, &'static str, &'static [&'static str])] {
+    &[
+        (
+            "Wi-Fi",
+            "x-apple.systempreferences:com.apple.wifi-settings-extension",
+            "ms-settings:network-wifi",
+            &["wifi", "wi-fi", "wi fi", "wireless", "wlan", "wife i", "why fi"],
+        ),
+        (
+            "Bluetooth",
+            "x-apple.systempreferences:com.apple.BluetoothSettings",
+            "ms-settings:bluetooth",
+            &["bluetooth", "blue tooth"],
+        ),
+        (
+            "Notifications",
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+            "ms-settings:notifications",
+            &["notification", "notifications", "notification center", "notifications center", "alerts"],
+        ),
+        (
+            "Mouse",
+            "x-apple.systempreferences:com.apple.Mouse-Settings.extension",
+            "ms-settings:mousetouchpad",
+            &["mouse", "pointer", "cursor"],
+        ),
+        (
+            "Trackpad",
+            "x-apple.systempreferences:com.apple.Trackpad-Settings.extension",
+            "ms-settings:devices-touchpad",
+            &["trackpad", "track pad", "touchpad", "touch pad"],
+        ),
+        (
+            "Keyboard",
+            "x-apple.systempreferences:com.apple.Keyboard-Settings.extension",
+            "ms-settings:typing",
+            &["keyboard", "key board", "keypad", "key pad", "typing", "keyboard shortcuts", "input sources"],
+        ),
+        (
+            "Sound",
+            "x-apple.systempreferences:com.apple.Sound-Settings.extension",
+            "ms-settings:sound",
+            &["sound", "sounds", "audio", "volume", "microphone", "speaker", "speakers"],
+        ),
+        (
+            "Displays",
+            "x-apple.systempreferences:com.apple.Displays-Settings.extension",
+            "ms-settings:display",
+            &["display", "displays", "monitor", "monitors", "brightness", "resolution"],
+        ),
+        (
+            "Battery",
+            "x-apple.systempreferences:com.apple.Battery-Settings.extension",
+            "ms-settings:powersleep",
+            &["battery", "power", "energy", "power and battery"],
+        ),
+        (
+            "Network",
+            "x-apple.systempreferences:com.apple.Network-Settings.extension",
+            "ms-settings:network-status",
+            &["network", "internet", "ethernet", "network and internet"],
+        ),
+        (
+            "VPN",
+            "x-apple.systempreferences:com.apple.NetworkExtensionSettingsUI.NESettingsUIExtension",
+            "ms-settings:network-vpn",
+            &["vpn"],
+        ),
+        (
+            "Appearance",
+            "x-apple.systempreferences:com.apple.Appearance-Settings.extension",
+            "ms-settings:personalization",
+            &["appearance", "dark mode", "light mode", "theme", "themes", "personalization"],
+        ),
+        (
+            "Wallpaper",
+            "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension",
+            "ms-settings:personalization-background",
+            &["wallpaper", "wallpapers", "background", "desktop background"],
+        ),
+        (
+            "Desktop & Dock",
+            "x-apple.systempreferences:com.apple.Desktop-Settings.extension",
+            "ms-settings:taskbar",
+            &["dock", "desktop and dock", "taskbar", "stage manager"],
+        ),
+        (
+            "Control Center",
+            "x-apple.systempreferences:com.apple.ControlCenter-Settings.extension",
+            "ms-settings:notifications",
+            &["control center", "control centre", "menu bar"],
+        ),
+        (
+            "Focus",
+            "x-apple.systempreferences:com.apple.Focus-Settings.extension",
+            "ms-settings:quiethours",
+            &["focus", "do not disturb", "dnd"],
+        ),
+        (
+            "Privacy & Security",
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension",
+            "ms-settings:privacy",
+            &["privacy", "security", "privacy and security", "security and privacy", "permissions"],
+        ),
+        (
+            "Accessibility",
+            "x-apple.systempreferences:com.apple.Accessibility-Settings.extension",
+            "ms-settings:easeofaccess",
+            &["accessibility"],
+        ),
+        (
+            "General",
+            "x-apple.systempreferences:com.apple.systempreferences.GeneralSettings",
+            "ms-settings:about",
+            &["general", "about this mac", "system info"],
+        ),
+        (
+            "Software Update",
+            "x-apple.systempreferences:com.apple.Software-Update-Settings.extension",
+            "ms-settings:windowsupdate",
+            &["software update", "software updates", "system update", "macos update", "windows update", "updates"],
+        ),
+        (
+            "Storage",
+            "x-apple.systempreferences:com.apple.settings.Storage",
+            "ms-settings:storagesense",
+            &["storage", "disk space"],
+        ),
+        (
+            "AirDrop & Handoff",
+            "x-apple.systempreferences:com.apple.AirDrop-Handoff-Settings.extension",
+            "ms-settings:crossdevice",
+            &["airdrop", "air drop", "handoff", "airdrop and handoff"],
+        ),
+        (
+            "Apple Intelligence & Siri",
+            "x-apple.systempreferences:com.apple.Siri-Settings.extension",
+            "ms-settings:cortana",
+            &["siri", "apple intelligence", "apple intelligence and siri"],
+        ),
+        (
+            "Lock Screen",
+            "x-apple.systempreferences:com.apple.Lock-Screen-Settings.extension",
+            "ms-settings:lockscreen",
+            &["lock screen", "lockscreen", "screen saver", "screensaver"],
+        ),
+        (
+            "Touch ID & Password",
+            "x-apple.systempreferences:com.apple.Touch-ID-Settings.extension",
+            "ms-settings:signinoptions",
+            &["touch id", "touchid", "fingerprint", "login password"],
+        ),
+        (
+            "Users & Groups",
+            "x-apple.systempreferences:com.apple.Users-Groups-Settings.extension",
+            "ms-settings:accounts",
+            &["users", "users and groups", "accounts", "user accounts"],
+        ),
+        (
+            "Date & Time",
+            "x-apple.systempreferences:com.apple.Date-Time-Settings.extension",
+            "ms-settings:dateandtime",
+            &["date and time", "date time", "time zone"],
+        ),
+        (
+            "Language & Region",
+            "x-apple.systempreferences:com.apple.Localization-Settings.extension",
+            "ms-settings:regionlanguage",
+            &["language", "language and region", "region"],
+        ),
+        (
+            "Sharing",
+            "x-apple.systempreferences:com.apple.Sharing-Settings.extension",
+            "ms-settings:crossdevice",
+            &["sharing", "file sharing", "screen sharing"],
+        ),
+        (
+            "Printers & Scanners",
+            "x-apple.systempreferences:com.apple.Print-Scan-Settings.extension",
+            "ms-settings:printers",
+            &["printer", "printers", "printers and scanners", "scanner", "scanners"],
+        ),
+        (
+            "Login Items",
+            "x-apple.systempreferences:com.apple.LoginItems-Settings.extension",
+            "ms-settings:startupapps",
+            &["login items", "startup", "startup apps"],
+        ),
+        (
+            "Screen Time",
+            "x-apple.systempreferences:com.apple.Screen-Time-Settings.extension",
+            "ms-settings:family-group",
+            &["screen time", "screentime"],
+        ),
+        (
+            "Spotlight",
+            "x-apple.systempreferences:com.apple.Spotlight-Settings.extension",
+            "ms-settings:search",
+            &["spotlight"],
+        ),
+        (
+            "Time Machine",
+            "x-apple.systempreferences:com.apple.Time-Machine-Settings.extension",
+            "ms-settings:backup",
+            &["time machine", "backup"],
+        ),
+        (
+            "Apple Account",
+            "x-apple.systempreferences:com.apple.systempreferences.AppleIDSettings",
+            "ms-settings:yourinfo",
+            &["apple id", "apple account", "icloud account"],
+        ),
+    ]
+}
+
+fn parse_settings_pane_action(lower: &str) -> Option<VoiceAction> {
+    let mut s = lower.trim();
+    let mut had_settings_wrapper = false;
+
+    // Strip chained settings wrappers, e.g.:
+    // "open settings, go to wi-fi settings"
+    // "open system settings and go to bluetooth"
+    // "in settings, open mouse settings"
+    for wrapper in [
+        "open system settings",
+        "go to system settings",
+        "launch system settings",
+        "open system preferences",
+        "go to system preferences",
+        "in system settings",
+        "within system settings",
+        "open settings",
+        "go to settings",
+        "launch settings",
+        "open preferences",
+        "go to preferences",
+        "in settings",
+        "within settings",
+        "inside settings",
+    ] {
+        if let Some(rest) = s.strip_prefix(wrapper) {
+            let rest = rest.trim_start();
+            // If user only said "open settings", let normal OpenApp("System Settings") handle it.
+            if rest.is_empty() {
+                return None;
+            }
+            let stripped_sep = rest
+                .trim_start_matches(|c: char| matches!(c, ',' | '.' | ';' | ':' | '-' | '—' | ' '))
+                .strip_prefix("and ")
+                .or_else(|| {
+                    rest.trim_start_matches(|c: char| matches!(c, ',' | '.' | ';' | ':' | '-' | '—' | ' '))
+                        .strip_prefix("then ")
+                })
+                .unwrap_or_else(|| {
+                    rest.trim_start_matches(|c: char| matches!(c, ',' | '.' | ';' | ':' | '-' | '—' | ' '))
+                })
+                .trim();
+            if !stripped_sep.is_empty() {
+                s = stripped_sep;
+                had_settings_wrapper = true;
+                break;
+            }
+        }
+    }
+
+    // Strip optional leading navigation verb
+    let mut had_verb = false;
+    for verb in [
+        "go to ",
+        "open up ",
+        "open ",
+        "show me ",
+        "show ",
+        "switch to ",
+        "launch ",
+        "select ",
+        "click on ",
+        "click ",
+        "navigate to ",
+        "view ",
+    ] {
+        if let Some(rest) = s.strip_prefix(verb) {
+            s = rest.trim();
+            had_verb = true;
+            break;
+        }
+    }
+
+    // Strip optional leading articles
+    for art in ["the ", "my "] {
+        if let Some(rest) = s.strip_prefix(art) {
+            s = rest.trim();
+            break;
+        }
+    }
+
+    // Strip optional trailing settings nouns ("settings", "manager", "preferences", "pane", etc.)
+    let mut had_settings_suffix = false;
+    loop {
+        let mut stripped = false;
+        for suf in [
+            " settings",
+            " setting",
+            " preferences",
+            " preference",
+            " manager",
+            " panel",
+            " pane",
+            " section",
+            " page",
+            " menu",
+            " options",
+            " tab",
+        ] {
+            if let Some(rest) = s.strip_suffix(suf) {
+                s = rest.trim();
+                had_settings_suffix = true;
+                stripped = true;
+                break;
+            }
+        }
+        if !stripped {
+            break;
+        }
+    }
+
+    // Safety guard: require either an explicit wrapper/verb or an explicit settings/manager suffix
+    // so normal dictation never triggers a Settings pane by accident.
+    if !had_settings_wrapper && !had_verb && !had_settings_suffix {
+        return None;
+    }
+    if s.is_empty() || s.split_whitespace().count() > 4 {
+        return None;
+    }
+
+    let query_norm = normalize_key(s);
+    if query_norm.len() < 3 {
+        return None;
+    }
+
+    for &(pane_name, mac_uri, win_uri, aliases) in settings_panes() {
+        let matched = aliases.iter().any(|a| normalize_key(a) == query_norm)
+            || normalize_key(pane_name) == query_norm;
+        if matched {
+            #[cfg(target_os = "windows")]
+            let uri = win_uri;
+            #[cfg(not(target_os = "windows"))]
+            let uri = {
+                let _ = win_uri;
+                mac_uri
+            };
+            return Some(VoiceAction::OpenSettingsPane {
+                pane_name: pane_name.to_string(),
+                target_uri: uri.to_string(),
+            });
+        }
+    }
+
+    None
+}
+
+fn resolve_known_folder(
+    key: &str,
+    allow_media_ambiguous: bool,
+) -> Option<(String, String)> {
+    #[cfg(target_os = "windows")]
+    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users".into());
+    #[cfg(not(target_os = "windows"))]
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/Users".into());
+
+    let join_home = |sub: &str| -> String {
+        PathBuf::from(&home).join(sub).to_string_lossy().to_string()
+    };
+
+    match key {
+        "downloads" | "download" => Some(("Downloads".into(), join_home("Downloads"))),
+        "applications" | "apps" => {
+            #[cfg(target_os = "windows")]
+            {
+                Some(("Applications".into(), "shell:AppsFolder".into()))
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                Some(("Applications".into(), "/Applications".into()))
+            }
+        }
+        "desktop" => Some(("Desktop".into(), join_home("Desktop"))),
+        "documents" | "document" | "docs" => Some(("Documents".into(), join_home("Documents"))),
+        "home" | "user" | "userprofile" => Some(("Home".into(), home)),
+        "pictures" | "picture" => Some(("Pictures".into(), join_home("Pictures"))),
+        "photos" if allow_media_ambiguous => Some(("Pictures".into(), join_home("Pictures"))),
+        "movies" | "movie" | "videos" | "video" => {
+            #[cfg(target_os = "windows")]
+            {
+                Some(("Videos".into(), join_home("Videos")))
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                Some(("Movies".into(), join_home("Movies")))
+            }
+        }
+        "music" if allow_media_ambiguous => Some(("Music".into(), join_home("Music"))),
+        "trash" | "bin" | "trashbin" | "recyclebin" => {
+            #[cfg(target_os = "windows")]
+            {
+                Some(("Recycle Bin".into(), "shell:RecycleBinFolder".into()))
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                Some(("Trash".into(), join_home(".Trash")))
+            }
+        }
+        "recents" | "recent" | "recentfiles" => {
+            #[cfg(target_os = "windows")]
+            {
+                Some(("Recents".into(), "shell:Recent".into()))
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let canned = "/System/Library/CoreServices/Finder.app/Contents/Resources/MyLibraries/myDocuments.cannedSearch";
+                if std::path::Path::new(canned).exists() {
+                    Some(("Recents".into(), canned.into()))
+                } else {
+                    Some(("Home".into(), home))
+                }
+            }
+        }
+        "icloud" | "iclouddrive" => {
+            #[cfg(target_os = "macos")]
+            {
+                Some((
+                    "iCloud Drive".into(),
+                    join_home("Library/Mobile Documents/com~apple~CloudDocs"),
+                ))
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                None
+            }
+        }
+        "developer" => {
+            let p = join_home("Developer");
+            if allow_media_ambiguous || std::path::Path::new(&p).exists() {
+                Some(("Developer".into(), p))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+fn parse_folder_action(lower: &str, installed: &[InstalledApp]) -> Option<VoiceAction> {
+    let mut s = lower.trim();
+
+    // Standalone "go to find" / "open find" (frequent STT transcription of "Finder")
+    if matches!(s, "go to find" | "open find" | "switch to find") {
+        if let Some(app) = installed
+            .iter()
+            .find(|a| normalize_key(&a.name) == "finder" || normalize_key(&a.name) == "fileexplorer")
+        {
+            return Some(VoiceAction::OpenApp {
+                app_name: app.name.clone(),
+                app_path: app.path.clone(),
+                is_web: false,
+            });
+        }
+    }
+
+    // Strip optional leading Finder / File Explorer chain wrapper, e.g.:
+    // "go to find, open the downloads"
+    // "go to finder, open applications"
+    // "open finder and go to downloads"
+    // "open file explorer, open downloads"
+    let mut had_finder_wrapper = false;
+    for wrapper in [
+        "go to file explorer",
+        "open file explorer",
+        "switch to file explorer",
+        "in file explorer",
+        "go to explorer",
+        "open explorer",
+        "in explorer",
+        "go to finder",
+        "open finder",
+        "switch to finder",
+        "in finder",
+        "inside finder",
+        "from finder",
+        "go to find",
+        "open find",
+        "in find",
+    ] {
+        if let Some(rest) = s.strip_prefix(wrapper) {
+            let rest = rest.trim_start();
+            if rest.is_empty() {
+                return None;
+            }
+            let stripped_sep = rest
+                .trim_start_matches(|c: char| matches!(c, ',' | '.' | ';' | ':' | '-' | '—' | ' '))
+                .strip_prefix("and ")
+                .or_else(|| {
+                    rest.trim_start_matches(|c: char| matches!(c, ',' | '.' | ';' | ':' | '-' | '—' | ' '))
+                        .strip_prefix("then ")
+                })
+                .unwrap_or_else(|| {
+                    rest.trim_start_matches(|c: char| matches!(c, ',' | '.' | ';' | ':' | '-' | '—' | ' '))
+                })
+                .trim();
+            if !stripped_sep.is_empty() {
+                s = stripped_sep;
+                had_finder_wrapper = true;
+                break;
+            }
+        }
+    }
+
+    // Strip optional verb prefix
+    let mut had_verb = false;
+    for verb in [
+        "open up ",
+        "open ",
+        "go to ",
+        "show me ",
+        "show ",
+        "view ",
+        "browse ",
+        "launch ",
+        "switch to ",
+        "navigate to ",
+    ] {
+        if let Some(rest) = s.strip_prefix(verb) {
+            s = rest.trim();
+            had_verb = true;
+            break;
+        }
+    }
+
+    // Strip optional articles ("the ", "my ")
+    for art in ["the ", "my "] {
+        if let Some(rest) = s.strip_prefix(art) {
+            s = rest.trim();
+            break;
+        }
+    }
+
+    // Strip optional trailing folder/directory nouns
+    let mut had_folder_suffix = false;
+    for suf in [" folder", " directory", " tab", " window"] {
+        if let Some(rest) = s.strip_suffix(suf) {
+            s = rest.trim();
+            had_folder_suffix = true;
+            break;
+        }
+    }
+
+    if !had_finder_wrapper && !had_verb && !had_folder_suffix {
+        return None;
+    }
+    if s.is_empty() || s.split_whitespace().count() > 3 {
+        return None;
+    }
+
+    let key = normalize_key(s);
+    if let Some((folder_name, folder_path)) =
+        resolve_known_folder(&key, had_finder_wrapper || had_folder_suffix)
+    {
+        return Some(VoiceAction::OpenFolder {
+            folder_name,
+            folder_path,
+        });
+    }
+
+    None
+}
+
 /// Parse a spoken transcript into a structured Vani Action if it clearly expresses one.
 pub fn parse_voice_action(
     raw_text: &str,
@@ -777,6 +1363,19 @@ pub fn parse_voice_action(
                 }
             }
         }
+    }
+
+    // 1.7 System Settings sub-panes (e.g. "open settings, go to Wi-Fi settings",
+    //     "open settings, go to Bluetooth settings", "notification manager",
+    //     "mouse settings", "keypad settings")
+    if let Some(action) = parse_settings_pane_action(&lower) {
+        return Some(action);
+    }
+
+    // 1.8 Finder / File Explorer folders (e.g. "go to find, open the downloads",
+    //     "go to finder, open applications", "open the downloads", "open applications")
+    if let Some(action) = parse_folder_action(&lower, installed) {
+        return Some(action);
     }
 
     // 2. "start typing <payload>" / "type in chat <payload>"
@@ -1081,6 +1680,65 @@ pub fn execute_action(
                 target_app: None,
             })
         }
+        VoiceAction::OpenSettingsPane {
+            pane_name,
+            target_uri,
+        } => {
+            open_application(pane_name, target_uri, true)?;
+            Ok(ActionExecutionResult {
+                ok: true,
+                action_kind: "openSettingsPane".into(),
+                summary: format!("Opened {} Settings", pane_name),
+                follow_up_dictation: hands_free_mode,
+                stop_hands_free: false,
+                target_app: Some(if cfg!(target_os = "macos") {
+                    "System Settings".into()
+                } else {
+                    "Settings".into()
+                }),
+            })
+        }
+        VoiceAction::OpenFolder {
+            folder_name,
+            folder_path,
+        } => {
+            #[cfg(target_os = "macos")]
+            {
+                let status = std::process::Command::new("open")
+                    .arg(folder_path)
+                    .status()?;
+                if !status.success() {
+                    return Err(anyhow!("Could not open folder {}", folder_name));
+                }
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let status = std::process::Command::new("cmd")
+                    .args(["/C", "start", "", folder_path])
+                    .status()?;
+                if !status.success() {
+                    return Err(anyhow!("Could not open folder {}", folder_name));
+                }
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            {
+                let _ = folder_path;
+                return Err(anyhow!("Opening folders is not supported on this OS"));
+            }
+
+            Ok(ActionExecutionResult {
+                ok: true,
+                action_kind: "openFolder".into(),
+                summary: format!("Opened {} folder", folder_name),
+                follow_up_dictation: hands_free_mode,
+                stop_hands_free: false,
+                target_app: Some(if cfg!(target_os = "macos") {
+                    "Finder".into()
+                } else {
+                    "File Explorer".into()
+                }),
+            })
+        }
         VoiceAction::OpenApp {
             app_name,
             app_path,
@@ -1342,6 +2000,85 @@ mod tests {
     }
 
     #[test]
+    fn parses_system_settings_panes_and_finder_folders() {
+        let mut apps = sample_apps();
+        apps.push(InstalledApp { name: "Finder".into(), path: "/System/Library/CoreServices/Finder.app".into(), is_web: false });
+        apps.push(InstalledApp { name: "System Settings".into(), path: "/System/Applications/System Settings.app".into(), is_web: false });
+        apps.push(InstalledApp { name: "Photos".into(), path: "/System/Applications/Photos.app".into(), is_web: false });
+
+        // Settings panes (chained, direct verb, and standalone)
+        for (phrase, expected_pane) in [
+            ("open settings, go to Wi-Fi settings", "Wi-Fi"),
+            ("Open settings. Go to Wi-Fi settings.", "Wi-Fi"),
+            ("open settings and go to Bluetooth settings", "Bluetooth"),
+            ("Open settings. Go to Bluetooth.", "Bluetooth"),
+            ("go to Wi-Fi settings", "Wi-Fi"),
+            ("open Bluetooth settings", "Bluetooth"),
+            ("notification manager", "Notifications"),
+            ("open notification manager", "Notifications"),
+            ("mouse settings", "Mouse"),
+            ("open settings, go to mouse settings", "Mouse"),
+            ("keypad settings", "Keyboard"),
+            ("open keyboard settings", "Keyboard"),
+            ("trackpad settings", "Trackpad"),
+            ("open sound settings", "Sound"),
+            ("open privacy settings", "Privacy & Security"),
+        ] {
+            match parse_voice_action(phrase, &apps, &[]) {
+                Some(VoiceAction::OpenSettingsPane { pane_name, .. }) => {
+                    assert_eq!(pane_name, expected_pane, "Failed for {:?}", phrase);
+                }
+                other => panic!("Expected OpenSettingsPane({}) for {:?}, got {:?}", expected_pane, phrase, other),
+            }
+        }
+
+        // Plain "open settings" still opens System Settings app
+        assert!(matches!(
+            parse_voice_action("open settings", &apps, &[]),
+            Some(VoiceAction::OpenApp { ref app_name, .. }) if app_name == "System Settings"
+        ));
+
+        // Finder / File Explorer folders (including Whisper "find" transcription of "Finder")
+        for (phrase, expected_folder) in [
+            ("go to find, open the downloads", "Downloads"),
+            ("Go to find. Open the downloads.", "Downloads"),
+            ("go to finder, open the downloads", "Downloads"),
+            ("Go to Finder. Open Applications.", "Applications"),
+            ("open the downloads", "Downloads"),
+            ("open downloads", "Downloads"),
+            ("go to downloads", "Downloads"),
+            ("open applications", "Applications"),
+            ("open the applications", "Applications"),
+            ("go to finder, open applications", "Applications"),
+            ("open desktop", "Desktop"),
+            ("open documents", "Documents"),
+            ("open music folder", "Music"),
+            ("go to finder, open music", "Music"),
+        ] {
+            match parse_voice_action(phrase, &apps, &[]) {
+                Some(VoiceAction::OpenFolder { folder_name, .. }) => {
+                    assert_eq!(folder_name, expected_folder, "Failed for {:?}", phrase);
+                }
+                other => panic!("Expected OpenFolder({}) for {:?}, got {:?}", expected_folder, phrase, other),
+            }
+        }
+
+        // "open music" and "open photos" still open the apps, not folders
+        assert!(matches!(
+            parse_voice_action("open music", &apps, &[]),
+            Some(VoiceAction::OpenApp { ref app_name, .. }) if app_name == "Music"
+        ));
+        assert!(matches!(
+            parse_voice_action("open photos", &apps, &[]),
+            Some(VoiceAction::OpenApp { ref app_name, .. }) if app_name == "Photos"
+        ));
+        assert!(matches!(
+            parse_voice_action("go to find", &apps, &[]),
+            Some(VoiceAction::OpenApp { ref app_name, .. }) if app_name == "Finder"
+        ));
+    }
+
+    #[test]
     fn rejects_normal_dictation_false_positives() {
         let apps = sample_apps();
         for prose in [
@@ -1349,6 +2086,8 @@ mod tests {
             "open a new pull request tomorrow",
             "I want to open my laptop later",
             "let's start the meeting at 3pm",
+            "I need to check my mouse settings later today",
+            "we should check the downloads count tomorrow",
         ] {
             assert!(
                 parse_voice_action(prose, &apps, &[]).is_none(),

@@ -507,6 +507,64 @@ function createBrowserPreviewBridge() {
           result: { ok: true, summary: `Searched “${mSiteSearch[1].trim()}” on ${site}` },
         };
       }
+      // System Settings panes preview
+      const settingsPaneMap = {
+        wifi: "Wi-Fi",
+        bluetooth: "Bluetooth",
+        notification: "Notifications",
+        notifications: "Notifications",
+        mouse: "Mouse",
+        trackpad: "Trackpad",
+        keyboard: "Keyboard",
+        keypad: "Keyboard",
+        sound: "Sound",
+        display: "Displays",
+        displays: "Displays",
+        battery: "Battery",
+        privacy: "Privacy & Security",
+        accessibility: "Accessibility",
+        wallpaper: "Wallpaper",
+        network: "Network",
+        storage: "Storage",
+      };
+      const cleanedSettings = lower
+        .replace(/^(?:(?:open|go to|in)\s+(?:system\s+)?(?:settings|preferences)[,\s]*(?:and\s+|then\s+)?)/i, "")
+        .replace(/^(?:open|go to|show|switch to)\s+/i, "")
+        .replace(/^(?:the|my)\s+/i, "")
+        .replace(/\s+(?:settings?|preferences?|manager|pane|panel)$/i, "")
+        .trim();
+      const paneHit = settingsPaneMap[norm(cleanedSettings)];
+      if (paneHit && (lower.includes("setting") || lower.includes("manager") || /^(?:open|go to|show)\s+/.test(lower))) {
+        return {
+          matched: true,
+          action: { kind: "openSettingsPane", paneName: paneHit, targetUri: "" },
+          executed: execute,
+          result: { ok: true, summary: `Opened ${paneHit} Settings` },
+        };
+      }
+      // Finder / Explorer folders preview
+      const folderMap = {
+        downloads: { name: "Downloads", path: isMacPreview ? "~/Downloads" : "%USERPROFILE%\\Downloads" },
+        applications: { name: "Applications", path: isMacPreview ? "/Applications" : "shell:AppsFolder" },
+        desktop: { name: "Desktop", path: isMacPreview ? "~/Desktop" : "%USERPROFILE%\\Desktop" },
+        documents: { name: "Documents", path: isMacPreview ? "~/Documents" : "%USERPROFILE%\\Documents" },
+        trash: { name: isMacPreview ? "Trash" : "Recycle Bin", path: isMacPreview ? "~/.Trash" : "shell:RecycleBinFolder" },
+      };
+      const cleanedFolder = lower
+        .replace(/^(?:(?:open|go to|in)\s+(?:finder|find|file explorer|explorer)[,\s]*(?:and\s+|then\s+)?)/i, "")
+        .replace(/^(?:open|go to|show)\s+/i, "")
+        .replace(/^(?:the|my)\s+/i, "")
+        .replace(/\s+(?:folder|directory)$/i, "")
+        .trim();
+      const folderHit = folderMap[norm(cleanedFolder)];
+      if (folderHit && /^(?:open|go to|show|in)\s+/.test(lower)) {
+        return {
+          matched: true,
+          action: { kind: "openFolder", folderName: folderHit.name, folderPath: folderHit.path },
+          executed: execute,
+          result: { ok: true, summary: `Opened ${folderHit.name} folder` },
+        };
+      }
       if (["press enter", "hit enter", "send message", "send it"].includes(lower)) {
         return { matched: true, action: { kind: "pressEnter" }, executed: execute, result: { ok: true, summary: "Pressed Enter" } };
       }

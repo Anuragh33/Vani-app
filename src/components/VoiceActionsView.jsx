@@ -19,10 +19,10 @@ import { ToggleSwitch } from "./VaniLogo";
 const EXAMPLE_PHRASES = [
   { label: "Open Antigravity", phrase: "Open Antigravity" },
   { label: "Safari Tab + Search", phrase: "Open new tab on Safari and start searching Netflix" },
+  { label: "Wi-Fi Settings", phrase: "Open settings, go to Wi-Fi settings" },
+  { label: "Downloads Folder", phrase: "Go to Finder, open the Downloads" },
   { label: "Open Apple Music", phrase: "Open Apple Music" },
-  { label: "Open ChatGPT", phrase: "Open ChatGPT" },
   { label: "Open Claude", phrase: "Open Claude" },
-  { label: "YouTube Search", phrase: "Search lo-fi beats on YouTube" },
 ];
 
 const COMMAND_REFERENCE = [
@@ -35,21 +35,25 @@ const COMMAND_REFERENCE = [
     category: "Browser Tabs & Instant Search",
     examples: [
       "Open new tab on Safari and start searching Netflix",
-      "Open new tab in Chrome and search <query>",
       "Search <query> on YouTube",
       "New tab / Close tab",
     ],
     desc: "Activates Safari, Chrome, Brave, or Edge, opens a fresh tab (⌘T / Ctrl+T), enters your search, and submits automatically.",
   },
   {
-    category: "True Hands-Free Mode",
-    examples: ["Tap ⌥ + ⌘ (Mac)", "Tap Right Alt + Ctrl (Win)", "Stop listening"],
-    desc: "Tap once to stay continuously listening without holding any key. Speak commands or prompts naturally — Vani pastes and sends automatically.",
+    category: "System Settings & Folders",
+    examples: [
+      "Open settings, go to Wi-Fi settings",
+      "Bluetooth / Mouse / Keypad settings",
+      "Notification manager",
+      "Open the Downloads / Applications",
+    ],
+    desc: "Jumps directly to any macOS System Settings or Windows Settings pane, and opens Downloads, Applications, Desktop, Documents, or Trash in Finder / Explorer.",
   },
   {
-    category: "Chained Open + Type & Controls",
-    examples: ["Open Antigravity and type <prompt>", "Start typing", "New line", "Clear input"],
-    desc: "Opens any app, focuses its chat/input box, and sends your message straight away without touching Enter.",
+    category: "True Hands-Free & Chained Typing",
+    examples: ["Tap ⌥ + ⌘ (Mac)", "Open Antigravity and type <prompt>", "Stop listening"],
+    desc: "Tap once to stay continuously listening without holding any key. Opens apps, pastes your words, and sends automatically without pressing Enter.",
   },
 ];
 
@@ -59,6 +63,16 @@ function describeParsedAction(parsed) {
   switch (a.kind) {
     case "stopHandsFree":
       return { badge: "Stop Hands-Free", steps: ["Exit Hands-Free listening mode & hide HUD"] };
+    case "openSettingsPane":
+      return {
+        badge: "System Settings",
+        steps: [`Open ${a.paneName} Settings directly`],
+      };
+    case "openFolder":
+      return {
+        badge: "Open Folder",
+        steps: [`Open ${a.folderName} (${a.folderPath})`],
+      };
     case "browserNewTab":
       return {
         badge: a.query ? "New Tab & Search" : "New Browser Tab",
