@@ -5,16 +5,12 @@ import {
   Copy,
   Check,
   FilePlus2,
-  Sparkles,
   Shield,
   ShieldOff,
   Cpu,
   ArrowRight,
-  Clock,
-  MessageSquareText,
   Zap,
   AlertTriangle,
-  Sliders,
   Volume2,
   RotateCcw,
 } from "lucide-react";
@@ -51,22 +47,19 @@ function FloatingPillSandbox({ settings, systemInfo, onOpenHudStudio }) {
     <div className="vani-card flex h-full flex-col gap-4 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 shrink-0 text-[var(--brand)]" />
-            <h3 className="text-sm font-semibold text-[var(--text)]">Floating HUD Preview</h3>
-          </div>
+          <h3 className="text-sm font-medium text-[var(--text)]">Floating HUD preview</h3>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            Live pill triggered by holding <kbd className="vani-kbd">{pushToTalkKey}</kbd>.{" "}
+            Triggered by holding <kbd className="vani-kbd">{pushToTalkKey}</kbd>.{" "}
             <button
               type="button"
               onClick={onOpenHudStudio}
-              className="font-medium text-[var(--brand)] hover:underline"
+              className="font-medium text-[var(--text-soft)] hover:text-[var(--text)] hover:underline"
             >
-              {isMac ? "Customize HUD & Menu Bar →" : "Customize HUD & System Tray →"}
+              {isMac ? "Customize HUD & menu bar" : "Customize HUD & system tray"}
             </button>
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
+        <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
           {[
             ["recording", "Rec"],
             ["processing", "AI"],
@@ -76,9 +69,9 @@ function FloatingPillSandbox({ settings, systemInfo, onOpenHudStudio }) {
               key={key}
               type="button"
               onClick={() => setPreviewPhase(key)}
-              className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                 previewPhase === key
-                  ? "bg-[var(--brand-soft)] text-[var(--brand)]"
+                  ? "bg-[var(--bg-surface)] text-[var(--text)]"
                   : "text-[var(--muted)] hover:text-[var(--text)]"
               }`}
             >
@@ -88,8 +81,8 @@ function FloatingPillSandbox({ settings, systemInfo, onOpenHudStudio }) {
         </div>
       </div>
 
-      {/* Simulated macOS desktop strip using the actual shared Overlay HUD */}
-      <div className="relative flex min-h-[124px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[radial-gradient(ellipse_at_top,rgba(244,114,182,0.14),transparent_65%),var(--bg-app)]">
+      {/* Matte desktop strip using the actual shared Overlay HUD */}
+      <div className="relative flex min-h-[124px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-app)]">
         {(previewPhase === "recording" || previewPhase === "processing") && (
           <FloatingHudPill
             phase={previewPhase}
@@ -242,32 +235,32 @@ export default function HomeView({
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Top Hero Header & Quick Controls */}
+      {/* Top Header & Quick Controls */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">VANI Studio</h1>
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-                usingAppleStt ||
-                whisperStatus?.modelInstalled ||
-                settings.transcriptionProvider === "openai"
-                  ? "bg-[var(--emerald-soft)] text-[var(--emerald)]"
-                  : "bg-[var(--amber-soft)] text-[var(--amber)]"
-              }`}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-medium tracking-[-0.02em] text-[var(--text)]">VANI Studio</h1>
+            <span className="inline-flex items-center gap-1.5 font-mono text-xs text-[var(--muted)]">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  usingAppleStt ||
+                  whisperStatus?.modelInstalled ||
+                  settings.transcriptionProvider === "openai"
+                    ? "bg-[var(--emerald)]"
+                    : "bg-[var(--amber)]"
+                }`}
+              />
               {usingAppleStt
-                ? "Ready · Apple SpeechAnalyzer"
+                ? "Apple SpeechAnalyzer"
                 : settings.transcriptionProvider === "openai"
                 ? "Cloud Whisper"
                 : whisperStatus?.modelInstalled
-                ? `Ready · ${activeModelObj?.name || settings.whisperModel}`
+                ? activeModelObj?.name || settings.whisperModel
                 : "Model download needed"}
             </span>
           </div>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Hold <kbd className="vani-kbd">{pushToTalkKey}</kbd> anywhere on {osName} to speak and paste, or test live right here.
+            Hold <kbd className="vani-kbd">{pushToTalkKey}</kbd> anywhere on {osName} to transcribe at your cursor, or test below
           </p>
         </div>
 
@@ -279,23 +272,27 @@ export default function HomeView({
               onSaveSettings({ privacyMode: next });
               onNotify?.(next ? "Privacy Shield enabled — 100% local, no history saved" : "Privacy Shield disabled");
             }}
-            className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition ${
+            className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-medium transition-colors ${
               settings.privacyMode
-                ? "border-emerald-500/40 bg-[var(--emerald-soft)] text-[var(--emerald)]"
+                ? "border-[var(--emerald)]/35 bg-[var(--emerald-soft)] text-[var(--emerald)]"
                 : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-soft)] hover:bg-[var(--bg-hover)]"
             }`}
           >
-            {settings.privacyMode ? <Shield className="h-3.5 w-3.5" /> : <ShieldOff className="h-3.5 w-3.5" />}
-            {settings.privacyMode ? "Privacy Shield On" : "Privacy Shield Off"}
+            {settings.privacyMode ? (
+              <Shield className="h-4 w-4" strokeWidth={1.5} />
+            ) : (
+              <ShieldOff className="h-4 w-4" strokeWidth={1.5} />
+            )}
+            {settings.privacyMode ? "Privacy Shield on" : "Privacy Shield off"}
           </button>
 
           <button
             type="button"
             onClick={() => onNavigate("models")}
-            className="vani-btn-secondary inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold"
+            className="vani-btn-secondary inline-flex h-9 items-center gap-2 px-3 text-xs"
           >
-            <Cpu className="h-3.5 w-3.5 text-[var(--brand)]" />
-            Models ({installedCount})
+            <Cpu className="h-4 w-4 text-[var(--muted)]" strokeWidth={1.5} />
+            <span>Models ({installedCount})</span>
           </button>
         </div>
       </div>
@@ -342,25 +339,20 @@ export default function HomeView({
       )}
 
       {/* Interactive Live Dictation Playground */}
-      <div className="vani-card relative overflow-hidden p-6">
-        <div
-          className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full opacity-20 blur-3xl"
-          style={{ background: "radial-gradient(circle, var(--brand), transparent 70%)" }}
-        />
-
-        <div className="relative flex flex-wrap items-center justify-between gap-4">
+      <div className="vani-card p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <Volume2 className="h-4 w-4 text-[var(--brand)]" />
-              <h2 className="text-base font-semibold text-[var(--text)]">Live Dictation Playground</h2>
+              <Volume2 className="h-4 w-4 text-[var(--muted)]" strokeWidth={1.5} />
+              <h2 className="text-base font-medium text-[var(--text)]">Live dictation playground</h2>
             </div>
-            <p className="mt-0.5 text-xs text-[var(--muted)]">
-              Record directly here to test acoustic clarity, filler removal, snippets, and mode formatting.
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Record here to test mic clarity, filler removal, snippets, and mode formatting
             </p>
           </div>
 
-          {/* Mode Quick-Switcher Pills */}
-          <div className="flex flex-wrap items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-1">
+          {/* Mode Quick-Switcher */}
+          <div className="flex flex-wrap items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
             {CONTEXT_MODES.map((m) => {
               const active = (settings.cleanupContext || "general") === m.id;
               return (
@@ -372,9 +364,9 @@ export default function HomeView({
                     onNotify?.(`Switched dictation mode to ${m.label}`);
                   }}
                   title={m.desc}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                     active
-                      ? "bg-[var(--brand-soft)] text-[var(--brand)] shadow-sm"
+                      ? "bg-[var(--bg-surface)] text-[var(--text)]"
                       : "text-[var(--muted)] hover:text-[var(--text)]"
                   }`}
                 >
@@ -385,26 +377,26 @@ export default function HomeView({
           </div>
         </div>
 
-        {/* Waveform Stage */}
-        <div className="relative mt-5 flex flex-col items-center justify-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-6 py-7">
-          <div className="flex w-full items-center justify-between text-[11px] text-[var(--muted)]">
-            <span className="inline-flex items-center gap-1.5">
+        {/* Waveform Stage (The Bright Acoustic Moment) */}
+        <div className="mt-5 flex flex-col items-center justify-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--bg-app)] px-6 py-7">
+          <div className="flex w-full items-center justify-between text-xs text-[var(--muted)]">
+            <span className="inline-flex items-center gap-2">
               <span
                 className={`h-2 w-2 rounded-full ${
                   phase === "recording"
-                    ? "animate-pulse bg-pink-500"
+                    ? "bg-[var(--brand)]"
                     : phase === "processing"
-                    ? "animate-pulse bg-violet-400"
+                    ? "bg-[var(--amber)]"
                     : "bg-[var(--emerald)]"
                 }`}
               />
               {phase === "recording"
-                ? "Listening — speak naturally"
+                ? "Listening"
                 : phase === "processing"
-                ? "Running local speech pipeline…"
+                ? "Transcribing locally"
                 : "Mic standby"}
             </span>
-            <span className="font-mono tabular-nums text-[var(--text-soft)]">
+            <span className="font-mono text-xs tabular-nums text-[var(--text-soft)]">
               {phase === "recording" ? formatTimer(elapsedMs) : "16 kHz PCM"}
             </span>
           </div>
@@ -418,25 +410,25 @@ export default function HomeView({
             className="w-full max-w-[520px]"
           />
 
-          <div className="flex flex-wrap items-center justify-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-2.5">
             {phase === "recording" ? (
               <button
                 type="button"
                 onClick={stopRecording}
-                className="inline-flex items-center gap-2 rounded-full border border-red-500/40 bg-red-500/15 px-5 py-2.5 text-sm font-semibold text-red-400 transition hover:bg-red-500/25"
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--danger)]/40 bg-[var(--danger-soft)] px-4 text-sm font-medium text-[var(--danger)] transition-colors"
               >
                 <Square className="h-3.5 w-3.5 fill-current" />
-                Stop &amp; Transcribe
+                Stop and transcribe
               </button>
             ) : (
               <button
                 type="button"
                 onClick={startRecording}
                 disabled={phase === "processing"}
-                className="vani-btn-primary inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold"
+                className="vani-btn-primary inline-flex h-10 items-center gap-2 px-5 text-sm"
               >
-                <Mic className="h-4 w-4" />
-                {phase === "processing" ? "Transcribing…" : phase === "done" ? "Record Again" : "Start Voice Test"}
+                <Mic className="h-4 w-4" strokeWidth={1.75} />
+                {phase === "processing" ? "Transcribing" : phase === "done" ? "Record again" : "Start voice test"}
               </button>
             )}
 
@@ -447,17 +439,17 @@ export default function HomeView({
                   setPhase("idle");
                   setResult(null);
                 }}
-                className="vani-btn-secondary inline-flex items-center gap-1.5 rounded-full px-3.5 py-2.5 text-xs font-medium"
+                className="vani-btn-secondary inline-flex h-10 items-center gap-1.5 px-3.5 text-xs"
               >
-                <RotateCcw className="h-3.5 w-3.5" />
+                <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />
                 Reset
               </button>
             )}
           </div>
 
-          {/* Pipeline chips */}
-          <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1 text-[11px] text-[var(--muted)]">
-            <span className="rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-0.5">
+          {/* Pipeline meta strip */}
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1 font-mono text-[11px] text-[var(--muted)]">
+            <span>
               {usingAppleStt
                 ? "Apple SpeechAnalyzer"
                 : settings.transcriptionProvider === "openai"
@@ -466,33 +458,19 @@ export default function HomeView({
                 ? `Metal · ${settings.whisperModel}`
                 : `Local · ${settings.whisperModel}`}
             </span>
-            <ArrowRight className="h-3 w-3 opacity-50" />
-            <span
-              className={`rounded-md border px-2 py-0.5 ${
-                settings.fillerWordRemoval
-                  ? "border-[var(--brand)]/30 bg-[var(--brand-soft)] text-[var(--brand)]"
-                  : "border-[var(--border)] bg-[var(--bg-surface)]"
-              }`}
-            >
-              Filler removal: {settings.fillerWordRemoval ? "On" : "Off"}
+            <ArrowRight className="h-3 w-3 opacity-50" strokeWidth={1.5} />
+            <span className={settings.fillerWordRemoval ? "text-[var(--text-soft)]" : ""}>
+              Filler removal: {settings.fillerWordRemoval ? "on" : "off"}
             </span>
-            <ArrowRight className="h-3 w-3 opacity-50" />
-            <span className="rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-0.5">
-              Snippets: {(settings.snippets || []).length}
-            </span>
-            <ArrowRight className="h-3 w-3 opacity-50" />
-            <span
-              className={`rounded-md border px-2 py-0.5 ${
-                usingApplePolish && appleAi?.foundationModelAvailable
-                  ? "border-[var(--violet)]/35 bg-[var(--violet-soft)] text-[var(--violet)]"
-                  : "border-[var(--border)] bg-[var(--bg-surface)]"
-              }`}
-            >
+            <ArrowRight className="h-3 w-3 opacity-50" strokeWidth={1.5} />
+            <span>Snippets: {(settings.snippets || []).length}</span>
+            <ArrowRight className="h-3 w-3 opacity-50" strokeWidth={1.5} />
+            <span>
               Polish:{" "}
               {usingApplePolish
                 ? "Apple Foundation Model"
                 : !settings.cleanupProvider || settings.cleanupProvider === "none" || (!isMac && settings.cleanupProvider === "apple")
-                ? "Local Rules"
+                ? "Local rules"
                 : settings.cleanupProvider}
             </span>
           </div>
@@ -500,17 +478,15 @@ export default function HomeView({
 
         {/* Result Output Card */}
         {phase === "done" && result && (
-          <div className="mt-4 rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-4 animate-scale-in">
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[var(--border)]">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand)]">
-                  Transcript Output
-                </span>
-                <span className="rounded-md bg-[var(--bg-subtle)] px-2 py-0.5 text-[11px] text-[var(--muted)]">
+          <div className="mt-4 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-4 animate-scale-in">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-2.5">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-medium text-[var(--text)]">Transcript output</span>
+                <span className="font-mono text-xs text-[var(--muted)] tabular-nums">
                   {countWords(displayResultText)} words
                 </span>
                 {result.providerLabel && (
-                  <span className="font-mono text-[11px] text-[var(--muted)]">{result.providerLabel}</span>
+                  <span className="font-mono text-xs text-[var(--muted)]">{result.providerLabel}</span>
                 )}
               </div>
 
@@ -519,21 +495,25 @@ export default function HomeView({
                   <button
                     type="button"
                     onClick={() => setShowRaw((v) => !v)}
-                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition ${
+                    className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
                       showRaw
-                        ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]"
+                        ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--text)]"
                         : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)]"
                     }`}
                   >
-                    {showRaw ? "Showing Raw" : "Compare Raw"}
+                    {showRaw ? "Showing raw" : "Compare raw"}
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => handleCopy(displayResultText)}
-                  className="vani-btn-secondary inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium"
+                  className="vani-btn-secondary inline-flex items-center gap-1.5 px-2.5 py-1 text-xs"
                 >
-                  {copied ? <Check className="h-3 w-3 text-[var(--emerald)]" /> : <Copy className="h-3 w-3" />}
+                  {copied ? (
+                    <Check className="h-3.5 w-3.5 text-[var(--emerald)]" strokeWidth={1.5} />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  )}
                   {copied ? "Copied" : "Copy"}
                 </button>
                 <button
@@ -541,81 +521,69 @@ export default function HomeView({
                   onClick={() => {
                     onSaveAsNote?.(result.text || result.rawText || "");
                   }}
-                  className="vani-btn-secondary inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium"
+                  className="vani-btn-secondary inline-flex items-center gap-1.5 px-2.5 py-1 text-xs"
                 >
-                  <FilePlus2 className="h-3 w-3" />
-                  Save to Notes
+                  <FilePlus2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  Save to notes
                 </button>
               </div>
             </div>
             <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--text)]">
               {result.actionExecuted ? (
-                <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--emerald-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--emerald)]">
-                  <Zap className="h-3.5 w-3.5" />
-                  Vani Action Executed: {result.actionSummary || result.actionKind}
+                <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--emerald-soft)] px-3 py-1.5 text-xs font-medium text-[var(--emerald)]">
+                  <Zap className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  Vani Action: {result.actionSummary || result.actionKind}
                 </span>
               ) : (
-                displayResultText || <span className="italic text-[var(--muted)]">No speech detected.</span>
+                displayResultText || <span className="text-[var(--muted)]">No speech detected</span>
               )}
             </p>
           </div>
         )}
 
         {phase === "error" && result?.error && (
-          <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-red-500/30 bg-[var(--danger-soft)] px-4 py-3 text-xs text-[var(--danger)]">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
+          <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-4 py-3 text-xs text-[var(--danger)]">
+            <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.5} />
             <span>{result.error}</span>
           </div>
         )}
       </div>
 
-      {/* KPI Strip */}
-      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      {/* KPI Strip — numbers only, no decorative icons */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
           {
-            label: "Words Dictated",
+            label: "Words dictated",
             value: totalWords.toLocaleString(),
-            sub: `${(history || []).length} total sessions`,
-            icon: MessageSquareText,
-            accent: "text-[var(--brand)]",
+            sub: `${(history || []).length} sessions`,
           },
           {
-            label: "Est. Time Saved",
-            value: minutesSaved >= 60 ? `${(minutesSaved / 60).toFixed(1)} hrs` : `${minutesSaved} min`,
+            label: "Time saved",
+            value: minutesSaved >= 60 ? `${(minutesSaved / 60).toFixed(1)}h` : `${minutesSaved}m`,
             sub: "vs 42 WPM typing",
-            icon: Clock,
-            accent: "text-[var(--emerald)]",
           },
           {
-            label: "Active Mode",
+            label: "Active mode",
             value: (settings.cleanupContext || "general").replace(/^\w/, (c) => c.toUpperCase()),
             sub:
               !settings.cleanupProvider || settings.cleanupProvider === "none" || (!isMac && settings.cleanupProvider === "apple")
-                ? "Local pipeline"
-                : `${settings.cleanupProvider} cleanup`,
-            icon: Sliders,
-            accent: "text-[var(--violet)]",
+                ? "Local rules"
+                : `${settings.cleanupProvider} polish`,
           },
           {
-            label: "System Ready",
-            value: permissions.accessibility ? "Full Access" : "Check Access",
+            label: "System access",
+            value: permissions.accessibility ? "Ready" : "Check access",
             sub: `Mic: ${permissions.microphone || "ready"}`,
-            icon: Zap,
-            accent: permissions.accessibility ? "text-[var(--emerald)]" : "text-[var(--amber)]",
           },
-        ].map((card) => {
-          const Icon = card.icon;
-          return (
-            <div key={card.label} className="vani-card p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">{card.label}</p>
-                <Icon className={`h-4 w-4 ${card.accent}`} />
-              </div>
-              <p className="mt-2 text-2xl font-bold tracking-tight text-[var(--text)] tabular-nums">{card.value}</p>
-              <p className="mt-0.5 text-xs text-[var(--muted)]">{card.sub}</p>
-            </div>
-          );
-        })}
+        ].map((card) => (
+          <div key={card.label} className="vani-card p-5">
+            <p className="text-xs text-[var(--muted)]">{card.label}</p>
+            <p className="mt-2 font-mono text-2xl font-medium tracking-tight text-[var(--text)] tabular-nums">
+              {card.value}
+            </p>
+            <p className="mt-1 text-xs text-[var(--muted)]">{card.sub}</p>
+          </div>
+        ))}
       </div>
 
       {/* Bottom Grid: Floating HUD Sandbox + Recent Transcriptions */}
@@ -624,21 +592,21 @@ export default function HomeView({
 
         <div className="vani-card flex h-full flex-col gap-3 p-5">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[var(--text)]">Recent Dictations</h3>
+            <h3 className="text-sm font-medium text-[var(--text)]">Recent dictations</h3>
             <button
               type="button"
               onClick={() => onNavigate("history")}
-              className="inline-flex items-center gap-1 text-xs font-medium text-[var(--brand)] hover:underline"
+              className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-soft)] hover:text-[var(--text)]"
             >
-              View all <ArrowRight className="h-3 w-3" />
+              View all <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} />
             </button>
           </div>
 
           {recent.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] py-6 text-center">
-              <p className="text-xs text-[var(--muted)]">No dictations recorded yet.</p>
-              <p className="mt-1 text-[11px] text-[var(--muted-strong)]">
-                Hold {pushToTalkKey} anywhere or use the playground above.
+              <p className="text-xs text-[var(--muted)]">No dictations recorded yet</p>
+              <p className="mt-1 text-xs text-[var(--muted-strong)]">
+                Hold {pushToTalkKey} anywhere or use the playground above
               </p>
             </div>
           ) : (
@@ -648,11 +616,11 @@ export default function HomeView({
                 return (
                   <div
                     key={entry.id}
-                    className="group flex items-start justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3.5 py-2.5 transition hover:border-[var(--border-strong)]"
+                    className="group flex items-start justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3.5 py-2.5 transition-colors hover:border-[var(--border-strong)]"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="line-clamp-2 text-xs leading-relaxed text-[var(--text)]">{body}</p>
-                      <p className="mt-1 text-[10px] text-[var(--muted)]">
+                      <p className="mt-1 font-mono text-[11px] text-[var(--muted)] tabular-nums">
                         {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ·{" "}
                         {countWords(body)} words
                       </p>
@@ -660,10 +628,10 @@ export default function HomeView({
                     <button
                       type="button"
                       onClick={() => handleCopy(body)}
-                      className="shrink-0 rounded-lg border border-[var(--border)] p-1.5 text-[var(--muted)] opacity-70 transition hover:bg-[var(--bg-hover)] hover:text-[var(--text)] group-hover:opacity-100"
+                      className="shrink-0 rounded-lg border border-[var(--border)] p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
                       title="Copy transcript"
                     >
-                      <Copy className="h-3.5 w-3.5" />
+                      <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
                     </button>
                   </div>
                 );

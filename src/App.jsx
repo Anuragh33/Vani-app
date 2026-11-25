@@ -3,7 +3,7 @@ import {
   Mic,
   History,
   FileText,
-  Sparkles,
+  Sliders,
   BookOpen,
   Cpu,
   BarChart3,
@@ -119,7 +119,7 @@ function buildNavGroups(sys) {
     workflow: [
       { key: "hud", label: sys.isMac ? "HUD & Menu Bar" : "HUD & System Tray", icon: PanelTop, shortcut: `${mod}4` },
       { key: "actions", label: "Vani Actions", icon: Zap, shortcut: `${mod}5` },
-      { key: "modes", label: "Modes & Pipeline", icon: Sparkles, shortcut: `${mod}6` },
+      { key: "modes", label: "Modes & Pipeline", icon: Sliders, shortcut: `${mod}6` },
       { key: "dictionary", label: "Dictionary & Snippets", icon: BookOpen, shortcut: `${mod}7` },
       { key: "models", label: "Speech Models", icon: Cpu, shortcut: `${mod}8` },
       { key: "usage", label: "Analytics", icon: BarChart3, shortcut: `${mod}9` },
@@ -198,24 +198,23 @@ function SidebarNavItem({ item, active, badge, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`group flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition ${
+      className={`group flex h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 text-left transition-colors ${
         active
-          ? "bg-[var(--bg-active)] text-[var(--brand)] font-semibold"
+          ? "bg-[var(--bg-active)] text-[var(--text)] font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
           : "text-[var(--text-soft)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
       }`}
     >
       <span className="flex min-w-0 items-center gap-2.5">
-        <Icon className={`h-4 w-4 shrink-0 ${active ? "text-[var(--brand)]" : "text-[var(--muted)] group-hover:text-[var(--text-soft)]"}`} />
-        <span className="truncate text-[13px]">{item.label}</span>
+        <Icon
+          className={`h-4 w-4 shrink-0 ${
+            active ? "text-[var(--brand)]" : "text-[var(--muted)] group-hover:text-[var(--text-soft)]"
+          }`}
+          strokeWidth={1.5}
+        />
+        <span className="truncate text-[13.5px]">{item.label}</span>
       </span>
       {badge !== undefined && badge !== null && badge > 0 && (
-        <span
-          className={`shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px] tabular-nums ${
-            active
-              ? "bg-[var(--brand)]/20 text-[var(--brand)]"
-              : "bg-[var(--bg-elevated)] text-[var(--muted)]"
-          }`}
-        >
+        <span className="shrink-0 font-mono text-[11px] text-[var(--muted)] tabular-nums">
           {badge}
         </span>
       )}
@@ -610,35 +609,35 @@ export default function App() {
 
   return (
     <main className="flex h-screen w-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text)]">
-      {/* Left macOS Sidebar */}
-      <aside className="flex w-[238px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-sidebar)] px-3 py-4">
+      {/* Left Sidebar */}
+      <aside className="flex w-[244px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-sidebar)] p-4">
         {/* Brand Header */}
-        <div className="flex items-center justify-between px-2">
+        <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2.5">
-            <VaniLogo size={32} />
+            <VaniLogo size={28} />
             <div>
               <div className="flex items-center gap-1.5">
-                <p className="text-sm font-bold tracking-tight text-[var(--text)]">VANI</p>
+                <p className="text-sm font-medium tracking-tight text-[var(--text)]">VANI</p>
                 {window.vani?.isPreview && (
-                  <span className="rounded bg-[var(--brand-soft)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--brand)]">
-                    Demo
-                  </span>
+                  <span className="font-mono text-[11px] text-[var(--muted)]">Demo</span>
                 )}
               </div>
-              <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--muted)]">
-                Local Dictation
-              </p>
+              <p className="text-[11px] text-[var(--muted)]">Local dictation</p>
             </div>
           </div>
 
           <button
             type="button"
             onClick={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })}
-            className="grid h-7 w-7 place-items-center rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+            className="grid h-7 w-7 place-items-center rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
             aria-label={settings.theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
             title={settings.theme === "dark" ? "Light mode" : "Dark mode"}
           >
-            {settings.theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+            {settings.theme === "dark" ? (
+              <Sun className="h-4 w-4" strokeWidth={1.5} />
+            ) : (
+              <Moon className="h-4 w-4" strokeWidth={1.5} />
+            )}
           </button>
         </div>
 
@@ -646,18 +645,18 @@ export default function App() {
         <button
           type="button"
           onClick={() => setPaletteOpen(true)}
-          className="mt-4 flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+          className="mt-4 flex h-9 items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-xs text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
         >
           <span className="flex items-center gap-2">
-            <Search className="h-3.5 w-3.5" />
-            <span>Quick actions…</span>
+            <Search className="h-4 w-4" strokeWidth={1.5} />
+            <span>Search</span>
           </span>
           <kbd className="vani-kbd font-mono text-[10px]">{systemInfo.modifierSymbol}K</kbd>
         </button>
 
         {/* Navigation Groups */}
-        <nav className="mt-4 flex-1 space-y-5 overflow-y-auto pr-0.5">
-          <div className="space-y-0.5">
+        <nav className="mt-4 flex-1 overflow-y-auto">
+          <div className="space-y-1">
             {navGroups.primary.map((item) => (
               <SidebarNavItem
                 key={item.key}
@@ -669,11 +668,11 @@ export default function App() {
             ))}
           </div>
 
-          <div>
-            <p className="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-strong)]">
-              Intelligence
+          <div className="mt-6">
+            <p className="mb-2 px-2.5 text-xs text-[var(--muted)]">
+              Voice &amp; models
             </p>
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               {navGroups.workflow.map((item) => (
                 <SidebarNavItem
                   key={item.key}
@@ -688,9 +687,9 @@ export default function App() {
         </nav>
 
         {/* Live Engine Status Card */}
-        <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3">
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="flex items-center gap-1.5 font-medium text-[var(--text)]">
+        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-2 font-medium text-[var(--text)]">
               <span
                 className={`h-2 w-2 rounded-full ${
                   usingAppleStt ||
@@ -700,32 +699,29 @@ export default function App() {
                     : "bg-[var(--amber)]"
                 }`}
               />
-              {settings.privacyMode ? "Privacy Shield" : "Engine Ready"}
+              {settings.privacyMode ? "Privacy Shield" : "Engine ready"}
             </span>
-            {settings.privacyMode && <Shield className="h-3 w-3 text-[var(--emerald)]" />}
+            {settings.privacyMode && <Shield className="h-3.5 w-3.5 text-[var(--emerald)]" strokeWidth={1.5} />}
           </div>
-          <p className="mt-1 truncate font-mono text-[10px] text-[var(--muted)]">
-            {usingAppleStt
-              ? "Apple On-Device"
-              : settings.whisperModel}{" "}
-            · {settings.cleanupContext || "general"}
+          <p className="mt-1 truncate font-mono text-[11px] text-[var(--muted)]">
+            {usingAppleStt ? "Apple On-Device" : settings.whisperModel} · {settings.cleanupContext || "general"}
           </p>
-          <div className="mt-2 space-y-1.5 border-t border-[var(--border)] pt-2 text-[10px] text-[var(--muted)]">
+          <div className="mt-2.5 space-y-1.5 border-t border-[var(--border)] pt-2.5 text-[11px] text-[var(--muted)]">
             <div className="flex items-center justify-between">
-              <span>Hold to speak</span>
+              <span>Push-to-talk</span>
               <kbd className="vani-kbd font-mono text-[10px]">{systemInfo.pushToTalkKey}</kbd>
             </div>
             <div className="flex items-center justify-between">
-              <span>Hands-Free</span>
-              <kbd className="vani-kbd font-mono text-[10px] text-[var(--emerald)]">{systemInfo.handsFreeKey}</kbd>
+              <span>Hands-free</span>
+              <kbd className="vani-kbd font-mono text-[10px]">{systemInfo.handsFreeKey}</kbd>
             </div>
           </div>
         </div>
 
         {/* Footer Utility Nav */}
-        <div className="mt-2.5 space-y-0.5 border-t border-[var(--border)] pt-2.5">
+        <div className="mt-3 space-y-1 border-t border-[var(--border)] pt-3">
           <SidebarNavItem
-            item={{ key: "help", label: "How VANI Works", icon: HelpCircle }}
+            item={{ key: "help", label: "How VANI works", icon: HelpCircle }}
             active={helpOpen}
             onClick={() => setHelpOpen(true)}
           />

@@ -72,86 +72,54 @@ function useSmoothLevels(rawLevels, active, simulatedEnergy = 0) {
   return levels;
 }
 
-function Breathwave({ levels, active, peak }) {
-  const W = 108;
-  const H = 26;
+function Breathwave({ levels, active, peak, handsFree = false }) {
+  const W = 104;
+  const H = 24;
   const uid = useId();
   const topPath = levelsToPath(levels, W, H, false);
   const botPath = levelsToPath(levels, W, H, true);
+  const strokeColor = handsFree ? "#4cc38a" : "#e14b7b";
 
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ overflow: "visible" }}>
       <defs>
         <linearGradient id={`${uid}g`} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#f472b6" />
-          <stop offset="50%" stopColor="#a78bfa" />
-          <stop offset="100%" stopColor="#67e8f9" />
+          <stop offset="0%" stopColor={strokeColor} stopOpacity="0.45" />
+          <stop offset="50%" stopColor={strokeColor} stopOpacity="1" />
+          <stop offset="100%" stopColor={strokeColor} stopOpacity="0.45" />
         </linearGradient>
-        <filter id={`${uid}f`}>
-          <feGaussianBlur in="SourceGraphic" stdDeviation="1.6" result="b" />
-          <feMerge>
-            <feMergeNode in="b" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
       </defs>
-      <path d={botPath} fill="none" stroke={`url(#${uid}g)`} strokeWidth="1.2" strokeLinecap="round" opacity={0.24} />
+      <path d={botPath} fill="none" stroke={`url(#${uid}g)`} strokeWidth="1.2" strokeLinecap="round" opacity={0.26} />
       <path
         d={topPath}
         fill="none"
         stroke={`url(#${uid}g)`}
         strokeWidth="2"
         strokeLinecap="round"
-        opacity={active ? Math.min(1, 0.58 + peak * 0.42) : 0.45}
-        filter={active ? `url(#${uid}f)` : undefined}
+        opacity={active ? Math.min(1, 0.65 + peak * 0.35) : 0.45}
       />
     </svg>
   );
 }
 
-// VANI signature 5-bar / 7-bar reactive equalizer style
-function EqualizerBars({ levels, active }) {
+// VANI studio 7-bar acoustic meter in single signal color
+function EqualizerBars({ levels, active, handsFree = false }) {
   const barIndices = [3, 6, 8, 11, 14, 16, 19];
-  const colors = ["#f9a8d4", "#f472b6", "#ec4899", "#c084fc", "#a78bfa", "#818cf8", "#67e8f9"];
+  const color = handsFree ? "#4cc38a" : "#e14b7b";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 3.5, height: 24, padding: "0 4px" }}>
-      {barIndices.map((idx, i) => {
+      {barIndices.map((idx) => {
         const val = active ? Math.max(0.18, Math.min(1, (levels[idx] ?? 0.2) * 1.25)) : 0.2;
-        const h = Math.round(5 + val * 18);
-        return (
-          <span
-            key={idx}
-            style={{
-              width: 3,
-              height: h,
-              borderRadius: 999,
-              background: colors[i],
-              boxShadow: active && val > 0.45 ? `0 0 8px ${colors[i]}88` : "none",
-              transition: "height 75ms ease-out",
-            }}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-// Ultra-compact 3-bar Wispr-style minimal indicator
-function MinimalBars({ levels, active }) {
-  const idxs = [6, 11, 16];
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 2.5, height: 18 }}>
-      {idxs.map((idx, i) => {
-        const val = active ? Math.max(0.22, Math.min(1, (levels[idx] ?? 0.2) * 1.2)) : 0.24;
-        const h = Math.round(5 + val * 13);
+        const h = Math.round(4 + val * 18);
         return (
           <span
             key={idx}
             style={{
               width: 2.8,
               height: h,
-              borderRadius: 999,
-              background: i === 1 ? "#f472b6" : "#f9a8d4",
+              borderRadius: 2,
+              background: color,
+              opacity: 0.65 + val * 0.35,
               transition: "height 75ms ease-out",
             }}
           />
@@ -161,36 +129,64 @@ function MinimalBars({ levels, active }) {
   );
 }
 
-function OrbitDots({ compact = false }) {
+// Compact 3-bar acoustic indicator
+function MinimalBars({ levels, active, handsFree = false }) {
+  const idxs = [6, 11, 16];
+  const color = handsFree ? "#4cc38a" : "#e14b7b";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 3, height: 18 }}>
+      {idxs.map((idx, i) => {
+        const val = active ? Math.max(0.22, Math.min(1, (levels[idx] ?? 0.2) * 1.2)) : 0.24;
+        const h = Math.round(4 + val * 13);
+        return (
+          <span
+            key={idx}
+            style={{
+              width: 2.6,
+              height: h,
+              borderRadius: 2,
+              background: color,
+              opacity: i === 1 ? 1 : 0.72,
+              transition: "height 75ms ease-out",
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function OrbitDots({ compact = false, handsFree = false }) {
+  const accent = handsFree ? "#4cc38a" : "#e14b7b";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <div className="relative flex h-[26px] w-[32px] items-center justify-center">
+      <div className="relative flex h-[24px] w-[28px] items-center justify-center">
         <style>{`
           @keyframes vaniOrbit {
-            from { transform: rotate(var(--od)) translateX(7.5px) rotate(calc(-1*var(--od))); }
-            to   { transform: rotate(calc(var(--od) + 360deg)) translateX(7.5px) rotate(calc(-1*(var(--od)+360deg))); }
+            from { transform: rotate(var(--od)) translateX(7px) rotate(calc(-1*var(--od))); }
+            to   { transform: rotate(calc(var(--od) + 360deg)) translateX(7px) rotate(calc(-1*(var(--od)+360deg))); }
           }
         `}</style>
         {[
-          { deg: 0, color: "#f472b6", dur: "0.88s" },
-          { deg: 120, color: "#a78bfa", dur: "0.96s" },
-          { deg: 240, color: "#67e8f9", dur: "1.04s" },
-        ].map(({ deg, color, dur }, i) => (
+          { deg: 0, color: accent, dur: "0.88s", opacity: 1 },
+          { deg: 120, color: "#ededed", dur: "0.96s", opacity: 0.7 },
+          { deg: 240, color: "#a1a1a6", dur: "1.04s", opacity: 0.55 },
+        ].map(({ deg, color, dur, opacity }, i) => (
           <span
             key={i}
             className="absolute h-[4px] w-[4px] rounded-full"
             style={{
               "--od": `${deg}deg`,
               background: color,
-              boxShadow: `0 0 6px 1px ${color}88`,
+              opacity,
               animation: `vaniOrbit ${dur} linear infinite`,
             }}
           />
         ))}
       </div>
       {!compact && (
-        <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.84)", letterSpacing: "0.01em" }}>
-          Transcribing…
+        <span style={{ fontSize: 12, fontWeight: 500, color: "#ededed" }}>
+          Transcribing
         </span>
       )}
     </div>
@@ -236,28 +232,18 @@ export function FloatingHudPill({
         alignItems: "center",
         justifyContent: "center",
         gap: compact ? 8 : 10,
-        background: glass ? "rgba(11, 9, 18, 0.78)" : "rgba(11, 9, 18, 0.96)",
-        backdropFilter: glass ? "blur(28px) saturate(160%)" : "none",
-        WebkitBackdropFilter: glass ? "blur(28px) saturate(160%)" : "none",
-        boxShadow: [
-          "0 0 0 1px rgba(255,255,255,0.11) inset",
-          recording
-            ? `0 8px 26px rgba(0,0,0,0.45), 0 0 ${10 + peak * 20}px ${2 + peak * 4}px rgba(244,114,182,${0.18 + peak * 0.36})`
-            : processing
-            ? "0 8px 26px rgba(0,0,0,0.45), 0 0 14px 2px rgba(167,139,250,0.26)"
-            : "0 6px 20px rgba(0,0,0,0.35)",
-        ]
-          .filter(Boolean)
-          .join(", "),
+        background: glass ? "rgba(15, 15, 16, 0.88)" : "rgba(15, 15, 16, 0.98)",
+        backdropFilter: glass ? "blur(24px)" : "none",
+        WebkitBackdropFilter: glass ? "blur(24px)" : "none",
+        boxShadow:
+          "0 0 0 1px rgba(237,237,237,0.12) inset, 0 10px 28px rgba(0,0,0,0.48)",
         opacity: visible ? 1 : 0,
-        transform: visible
-          ? `scale(${recording ? 1 + peak * 0.025 : 1})`
-          : "scale(0.88) translateY(-6px)",
-        transition: "opacity 200ms ease, transform 180ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 80ms linear",
+        transform: visible ? "scale(1)" : "scale(0.96) translateY(-4px)",
+        transition: "opacity 160ms cubic-bezier(0.22,1,0.36,1), transform 160ms cubic-bezier(0.22,1,0.36,1)",
       }}
     >
       {processing ? (
-        <OrbitDots compact={compact} />
+        <OrbitDots compact={compact} handsFree={handsFree} />
       ) : (
         <>
           <span
@@ -265,10 +251,7 @@ export function FloatingHudPill({
               height: compact ? 6 : 7,
               width: compact ? 6 : 7,
               borderRadius: "50%",
-              background: handsFree ? "#34d399" : "#f472b6",
-              boxShadow: handsFree
-                ? "0 0 8px rgba(52,211,153,0.95)"
-                : "0 0 8px rgba(244,114,182,0.95)",
+              background: handsFree ? "#4cc38a" : "#e14b7b",
               flexShrink: 0,
             }}
           />
@@ -276,27 +259,23 @@ export function FloatingHudPill({
           {handsFree && (
             <span
               style={{
-                fontSize: compact ? 8.5 : 9,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                color: "#6ee7b7",
-                background: "rgba(52,211,153,0.16)",
-                padding: compact ? "1.5px 5px" : "2px 6px",
-                borderRadius: 999,
+                fontSize: compact ? 9.5 : 10.5,
+                fontWeight: 500,
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                color: "#4cc38a",
                 whiteSpace: "nowrap",
               }}
             >
-              Hands-Free
+              Hands-free
             </span>
           )}
 
           {hudStyle === "bars" ? (
-            <EqualizerBars levels={smoothLevels} active={recording} />
+            <EqualizerBars levels={smoothLevels} active={recording} handsFree={handsFree} />
           ) : hudStyle === "minimal" ? (
-            <MinimalBars levels={smoothLevels} active={recording} />
+            <MinimalBars levels={smoothLevels} active={recording} handsFree={handsFree} />
           ) : (
-            <Breathwave levels={smoothLevels} active={recording} peak={peak} />
+            <Breathwave levels={smoothLevels} active={recording} peak={peak} handsFree={handsFree} />
           )}
 
           {showTimer && (
@@ -304,7 +283,7 @@ export function FloatingHudPill({
               style={{
                 fontSize: compact ? 10.5 : 11,
                 fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                color: "rgba(255,255,255,0.74)",
+                color: "#a1a1a6",
                 fontVariantNumeric: "tabular-nums",
                 minWidth: 26,
               }}
@@ -316,14 +295,11 @@ export function FloatingHudPill({
           {showMode && modeLabel && modeLabel !== "general" && (
             <span
               style={{
-                fontSize: 9.5,
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                color: "#f9a8d4",
-                background: "rgba(244,114,182,0.18)",
-                padding: "2px 6px",
-                borderRadius: 999,
+                fontSize: 10.5,
+                fontWeight: 500,
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                color: "#a1a1a6",
+                textTransform: "capitalize",
               }}
             >
               {modeLabel}
