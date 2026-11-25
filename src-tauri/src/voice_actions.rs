@@ -36,6 +36,17 @@ pub enum VoiceAction {
         text: Option<String>,
         press_enter: bool,
     },
+    BrowserNewTab {
+        browser_name: Option<String>,
+        browser_path: Option<String>,
+        query: Option<String>,
+    },
+    BrowserCloseTab,
+    BrowserSearchSite {
+        site_name: String,
+        url: String,
+        query: String,
+    },
     StopHandsFree,
     PressEnter,
     NewLine,
@@ -545,6 +556,66 @@ fn strip_trailing_enter(raw: &str) -> (String, bool) {
     (raw.trim().to_string(), false)
 }
 
+fn is_browser_name(name: &str) -> bool {
+    let n = name.to_lowercase();
+    n.contains("safari")
+        || n.contains("chrome")
+        || n.contains("brave")
+        || n.contains("edge")
+        || n.contains("firefox")
+        || n.contains("arc")
+        || n.contains("opera")
+        || n.contains("vivaldi")
+}
+
+fn encode_url_component(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 2);
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            b' ' => out.push('+'),
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
+fn strip_search_verb(raw: &str) -> String {
+    let mut s = raw
+        .trim()
+        .trim_end_matches(|c: char| matches!(c, '.' | '!' | '?'))
+        .trim();
+    loop {
+        let lower = s.to_lowercase();
+        let mut stripped = false;
+        for p in [
+            "start searching for ",
+            "start searching ",
+            "searching for ",
+            "searching ",
+            "search for ",
+            "search ",
+            "look up ",
+            "lookup ",
+            "go to ",
+            "open ",
+            "for ",
+        ] {
+            if lower.starts_with(p) {
+                s = s[p.len()..].trim();
+                stripped = true;
+                break;
+            }
+        }
+        if !stripped {
+            break;
+        }
+    }
+    s.to_string()
+}
+
 /// Parse a spoken transcript into a structured Vani Action if it clearly expresses one.
 pub fn parse_voice_action(
     raw_text: &str,
@@ -561,7 +632,7 @@ pub fn parse_voice_action(
         .trim();
     let lower = cleaned_end.to_lowercase();
 
-    // 1. Standalone quick keyboard / hands-free control actions
+    // 1. Standalone quick keyboard / tab / hands-free control actions
     match lower.as_str() {
         "stop listening"
         | "stop hands free"
@@ -573,6 +644,16 @@ pub fn parse_voice_action(
         | "stop vani"
         | "goodbye vani" => {
             return Some(VoiceAction::StopHandsFree);
+        }
+        "close tab" | "close this tab" | "close the tab" => {
+            return Some(VoiceAction::BrowserCloseTab);
+        }
+        "new tab" | "open new tab" | "open a new tab" => {
+            return Some(VoiceAction::BrowserNewTab {
+                browser_name: None,
+                browser_path: None,
+                query: None,
+            });
         }
         "press enter" | "hit enter" | "send message" | "send it" | "submit message" => {
             return Some(VoiceAction::PressEnter);
@@ -599,6 +680,103 @@ pub fn parse_voice_action(
             });
         }
         _ => {}
+    }
+
+    // 1.5 Browser New Tab + optional browser + optional search/query:
+    // e.g. "open new tab on Safari and start searching Netflix"
+    //      "open a new tab in Chrome and search weather"
+    //      "open new tab on Safari"
+    //      "new tab and search Netflix"
+    for nt_prefix in ["open a new tab", "open new tab", "new tab"] {
+        if let Some(rest_lower) = lower.strip_prefix(nt_prefix) {
+            let orig_rest = trimmed[nt_prefix.len()..].trim();
+            let rest_lower = rest_lower.trim();
+
+            // Split optional " and ..." / " then ..." clause
+            let mut browser_part = rest_lower;
+            let mut query_part: Option<String> = None;
+
+            for sep in [" and ", ", and ", " then ", ", "] {
+                if let Some(idx) = rest_lower.find(sep) {
+                    browser_part = rest_lower[..idx].trim();
+                    let raw_q = &orig_rest[idx + sep.len()..];
+                    let q = strip_search_verb(raw_q);
+                    if !q.is_empty() {
+                        query_part = Some(q);
+                    }
+                    break;
+                }
+            }
+
+            // If there was no "and", check "open new tab on/in <browser>"
+            let mut browser_name = None;
+            let mut browser_path = None;
+            if !browser_part.is_empty() {
+                let candidate = browser_part
+                    .strip_prefix("on ")
+                    .or_else(|| browser_part.strip_prefix("in "))
+                    .unwrap_or(browser_part)
+                    .trim();
+                if let Some(app) = resolve_app(candidate, installed, custom_aliases) {
+                    if !app.is_web {
+                        browser_name = Some(app.name);
+                        browser_path = Some(app.path);
+                    }
+                } else if query_part.is_none() {
+                    // Maybe "new tab search Netflix"
+                    let q = strip_search_verb(orig_rest);
+                    if !q.is_empty() && q.to_lowercase() != rest_lower {
+                        query_part = Some(q);
+                    }
+                }
+            }
+
+            if browser_name.is_some() || query_part.is_some() {
+                return Some(VoiceAction::BrowserNewTab {
+                    browser_name,
+                    browser_path,
+                    query: query_part,
+                });
+            }
+        }
+    }
+
+    // 1.6 Direct "search [for] <query> on/in <browser or YouTube/Google>"
+    for s_prefix in ["start searching for ", "start searching ", "search for ", "search "] {
+        if let Some(after_s) = lower.strip_prefix(s_prefix) {
+            let orig_after = trimmed[s_prefix.len()..].trim();
+            for prep in [" on ", " in "] {
+                if let Some(idx) = after_s.rfind(prep) {
+                    let q = orig_after[..idx].trim().trim_end_matches(|c: char| matches!(c, '.' | '!' | '?')).to_string();
+                    let target = after_s[idx + prep.len()..].trim();
+                    if !q.is_empty() && !target.is_empty() {
+                        if target == "youtube" {
+                            return Some(VoiceAction::BrowserSearchSite {
+                                site_name: "YouTube".into(),
+                                url: format!("https://www.youtube.com/results?search_query={}", encode_url_component(&q)),
+                                query: q,
+                            });
+                        }
+                        if target == "google" {
+                            return Some(VoiceAction::BrowserSearchSite {
+                                site_name: "Google".into(),
+                                url: format!("https://www.google.com/search?q={}", encode_url_component(&q)),
+                                query: q,
+                            });
+                        }
+                        if let Some(app) = resolve_app(target, installed, custom_aliases) {
+                            if !app.is_web && is_browser_name(&app.name) {
+                                return Some(VoiceAction::BrowserNewTab {
+                                    browser_name: Some(app.name),
+                                    browser_path: Some(app.path),
+                                    query: Some(q),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // 2. "start typing <payload>" / "type in chat <payload>"
@@ -634,6 +812,10 @@ pub fn parse_voice_action(
             let orig_after = &trimmed[prefix.len()..];
 
             let chain_markers: &[(&str, bool)] = &[
+                (" and start searching for ", true),
+                (" and start searching ", true),
+                (" and search for ", true),
+                (" and search ", true),
                 (" and start typing ", true),
                 (" and start dictating ", true),
                 (" and type ", true),
@@ -641,7 +823,6 @@ pub fn parse_voice_action(
                 (" and say ", true),
                 (" and ask ", true),
                 (" and send ", true),
-                (" and search ", true),
                 (" and message ", true),
                 (", start typing ", true),
                 (", type ", true),
@@ -662,6 +843,14 @@ pub fn parse_voice_action(
                             });
                         }
                         let (payload, explicit_enter) = strip_trailing_enter(payload_raw);
+                        // If target is a browser and user said "search", open a fresh tab first!
+                        if !app.is_web && is_browser_name(&app.name) && marker.contains("search") {
+                            return Some(VoiceAction::BrowserNewTab {
+                                browser_name: Some(app.name),
+                                browser_path: Some(app.path),
+                                query: Some(payload),
+                            });
+                        }
                         return Some(VoiceAction::OpenAndType {
                             app_name: app.name,
                             app_path: app.path,
@@ -828,6 +1017,70 @@ pub fn execute_action(
             stop_hands_free: true,
             target_app: None,
         }),
+        VoiceAction::BrowserNewTab {
+            browser_name,
+            browser_path,
+            query,
+        } => {
+            if let Some(name) = browser_name {
+                open_application(name, browser_path.as_deref().unwrap_or(""), false)?;
+                std::thread::sleep(Duration::from_millis(550));
+            }
+            crate::inject::send_new_tab()?;
+            std::thread::sleep(Duration::from_millis(260));
+
+            if let Some(q) = query {
+                if !q.is_empty() {
+                    #[cfg(target_os = "macos")]
+                    crate::inject::paste_to_app(q, browser_name.as_deref())?;
+                    #[cfg(not(target_os = "macos"))]
+                    crate::inject::paste_to_app(q, None)?;
+
+                    std::thread::sleep(Duration::from_millis(120));
+                    crate::inject::send_enter()?;
+                }
+            }
+
+            let label = browser_name.as_deref().unwrap_or("browser");
+            let summary = match query {
+                Some(q) if !q.is_empty() => format!("Opened new tab in {} & searched “{}”", label, q),
+                _ => format!("Opened new tab in {}", label),
+            };
+            Ok(ActionExecutionResult {
+                ok: true,
+                action_kind: "browserNewTab".into(),
+                summary,
+                follow_up_dictation: hands_free_mode,
+                stop_hands_free: false,
+                target_app: browser_name.clone().or_else(|| frontmost_app.map(|s| s.to_string())),
+            })
+        }
+        VoiceAction::BrowserCloseTab => {
+            crate::inject::send_close_tab()?;
+            Ok(ActionExecutionResult {
+                ok: true,
+                action_kind: "browserCloseTab".into(),
+                summary: "Closed active tab".into(),
+                follow_up_dictation: hands_free_mode,
+                stop_hands_free: false,
+                target_app: frontmost_app.map(|s| s.to_string()),
+            })
+        }
+        VoiceAction::BrowserSearchSite {
+            site_name,
+            url,
+            query,
+        } => {
+            open_application(site_name, url, true)?;
+            Ok(ActionExecutionResult {
+                ok: true,
+                action_kind: "browserSearchSite".into(),
+                summary: format!("Searched “{}” on {}", query, site_name),
+                follow_up_dictation: hands_free_mode,
+                stop_hands_free: false,
+                target_app: None,
+            })
+        }
         VoiceAction::OpenApp {
             app_name,
             app_path,
@@ -986,6 +1239,7 @@ mod tests {
             InstalledApp { name: "Antigravity".into(), path: "/Applications/Antigravity.app".into(), is_web: false },
             InstalledApp { name: "ChatGPT".into(), path: "/Applications/ChatGPT.app".into(), is_web: false },
             InstalledApp { name: "Music".into(), path: "/System/Applications/Music.app".into(), is_web: false },
+            InstalledApp { name: "Safari".into(), path: "/System/Applications/Safari.app".into(), is_web: false },
             InstalledApp { name: "Google Chrome".into(), path: "/Applications/Google Chrome.app".into(), is_web: false },
             InstalledApp { name: "Slack".into(), path: "/Applications/Slack.app".into(), is_web: false },
             InstalledApp { name: "Visual Studio Code".into(), path: "/Applications/Visual Studio Code.app".into(), is_web: false },
@@ -1045,6 +1299,46 @@ mod tests {
             other => panic!("Unexpected: {:?}", other),
         }
         assert!(matches!(parse_voice_action("Stop listening.", &apps, &[]), Some(VoiceAction::StopHandsFree)));
+    }
+
+    #[test]
+    fn parses_browser_new_tab_and_search_commands() {
+        let apps = sample_apps();
+        match parse_voice_action("open new tab on Safari and start searching Netflix", &apps, &[]) {
+            Some(VoiceAction::BrowserNewTab { browser_name, query, .. }) => {
+                assert_eq!(browser_name.as_deref(), Some("Safari"));
+                assert_eq!(query.as_deref(), Some("Netflix"));
+            }
+            other => panic!("Expected BrowserNewTab(Safari, Netflix), got {:?}", other),
+        }
+
+        match parse_voice_action("open a new tab in Chrome and search best keyboards", &apps, &[]) {
+            Some(VoiceAction::BrowserNewTab { browser_name, query, .. }) => {
+                assert_eq!(browser_name.as_deref(), Some("Google Chrome"));
+                assert_eq!(query.as_deref(), Some("best keyboards"));
+            }
+            other => panic!("Unexpected: {:?}", other),
+        }
+
+        match parse_voice_action("search lo-fi beats on YouTube", &apps, &[]) {
+            Some(VoiceAction::BrowserSearchSite { site_name, url, query }) => {
+                assert_eq!(site_name, "YouTube");
+                assert_eq!(query, "lo-fi beats");
+                assert!(url.contains("youtube.com/results?search_query=lo-fi+beats"));
+            }
+            other => panic!("Unexpected: {:?}", other),
+        }
+
+        match parse_voice_action("open Safari and start searching Netflix", &apps, &[]) {
+            Some(VoiceAction::BrowserNewTab { browser_name, query, .. }) => {
+                assert_eq!(browser_name.as_deref(), Some("Safari"));
+                assert_eq!(query.as_deref(), Some("Netflix"));
+            }
+            other => panic!("Unexpected: {:?}", other),
+        }
+
+        assert!(matches!(parse_voice_action("new tab", &apps, &[]), Some(VoiceAction::BrowserNewTab { browser_name: None, query: None, .. })));
+        assert!(matches!(parse_voice_action("close tab", &apps, &[]), Some(VoiceAction::BrowserCloseTab)));
     }
 
     #[test]

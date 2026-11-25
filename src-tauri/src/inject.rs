@@ -270,3 +270,55 @@ pub fn send_clear_input() -> Result<()> {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     Ok(())
 }
+
+pub fn send_new_tab() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to keystroke \"t\" using command down")
+            .status()?;
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            KEYEVENTF_KEYUP, VK_CONTROL, VK_T,
+        };
+        win_send_keys(&[
+            (VK_CONTROL, 0),
+            (VK_T, 0),
+            (VK_T, KEYEVENTF_KEYUP),
+            (VK_CONTROL, KEYEVENTF_KEYUP),
+        ]);
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    Ok(())
+}
+
+pub fn send_close_tab() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to keystroke \"w\" using command down")
+            .status()?;
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            KEYEVENTF_KEYUP, VK_CONTROL, VK_W,
+        };
+        win_send_keys(&[
+            (VK_CONTROL, 0),
+            (VK_W, 0),
+            (VK_W, KEYEVENTF_KEYUP),
+            (VK_CONTROL, KEYEVENTF_KEYUP),
+        ]);
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    Ok(())
+}

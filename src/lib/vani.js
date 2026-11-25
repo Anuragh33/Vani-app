@@ -481,6 +481,32 @@ function createBrowserPreviewBridge() {
       if (["stop listening", "stop hands free", "stop hands-free", "exit hands free", "stop vani"].includes(lower)) {
         return { matched: true, action: { kind: "stopHandsFree" }, executed: execute, result: { ok: true, summary: "Hands-free mode stopped" } };
       }
+      if (["close tab", "close this tab", "close the tab"].includes(lower)) {
+        return { matched: true, action: { kind: "browserCloseTab" }, executed: execute, result: { ok: true, summary: "Closed active tab" } };
+      }
+      if (["new tab", "open new tab", "open a new tab"].includes(lower)) {
+        return { matched: true, action: { kind: "browserNewTab", browserName: null, query: null }, executed: execute, result: { ok: true, summary: "Opened new tab" } };
+      }
+      const mNewTab = lower.match(/^(?:open\s+a?\s*new\s+tab|new\s+tab)\s+(?:(?:on|in)\s+([a-z0-9\s]+?))?(?:\s+and\s+(?:start\s+searching(?:\s+for)?|search(?:\s+for)?|go\s+to)\s+(.+))?$/i);
+      if (mNewTab && (mNewTab[1] || mNewTab[2])) {
+        const b = mNewTab[1] ? resolvePreviewApp(mNewTab[1]) : null;
+        return {
+          matched: true,
+          action: { kind: "browserNewTab", browserName: b?.name || null, query: mNewTab[2]?.trim() || null },
+          executed: execute,
+          result: { ok: true, summary: `Opened new tab${b ? ` in ${b.name}` : ""}${mNewTab[2] ? ` & searched “${mNewTab[2].trim()}”` : ""}` },
+        };
+      }
+      const mSiteSearch = lower.match(/^(?:start\s+)?search(?:ing)?(?:\s+for)?\s+(.+?)\s+(?:on|in)\s+(youtube|google)$/i);
+      if (mSiteSearch) {
+        const site = mSiteSearch[2] === "youtube" ? "YouTube" : "Google";
+        return {
+          matched: true,
+          action: { kind: "browserSearchSite", siteName: site, query: mSiteSearch[1].trim(), url: "" },
+          executed: execute,
+          result: { ok: true, summary: `Searched “${mSiteSearch[1].trim()}” on ${site}` },
+        };
+      }
       if (["press enter", "hit enter", "send message", "send it"].includes(lower)) {
         return { matched: true, action: { kind: "pressEnter" }, executed: execute, result: { ok: true, summary: "Pressed Enter" } };
       }

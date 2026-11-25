@@ -18,11 +18,11 @@ import { ToggleSwitch } from "./VaniLogo";
 
 const EXAMPLE_PHRASES = [
   { label: "Open Antigravity", phrase: "Open Antigravity" },
+  { label: "Safari Tab + Search", phrase: "Open new tab on Safari and start searching Netflix" },
   { label: "Open Apple Music", phrase: "Open Apple Music" },
   { label: "Open ChatGPT", phrase: "Open ChatGPT" },
   { label: "Open Claude", phrase: "Open Claude" },
-  { label: "Open + Ask", phrase: "Open Antigravity and type build a responsive navbar" },
-  { label: "Stop Listening", phrase: "Stop listening" },
+  { label: "YouTube Search", phrase: "Search lo-fi beats on YouTube" },
 ];
 
 const COMMAND_REFERENCE = [
@@ -32,23 +32,24 @@ const COMMAND_REFERENCE = [
     desc: "Launches installed apps natively — and automatically opens popular web apps (Claude, YouTube, Gmail, GitHub) in your browser if no desktop app is installed.",
   },
   {
+    category: "Browser Tabs & Instant Search",
+    examples: [
+      "Open new tab on Safari and start searching Netflix",
+      "Open new tab in Chrome and search <query>",
+      "Search <query> on YouTube",
+      "New tab / Close tab",
+    ],
+    desc: "Activates Safari, Chrome, Brave, or Edge, opens a fresh tab (⌘T / Ctrl+T), enters your search, and submits automatically.",
+  },
+  {
     category: "True Hands-Free Mode",
-    examples: ["Press ⌥ + ⌘ (Mac)", "Press Right Alt + Ctrl (Win)", "Stop listening"],
+    examples: ["Tap ⌥ + ⌘ (Mac)", "Tap Right Alt + Ctrl (Win)", "Stop listening"],
     desc: "Tap once to stay continuously listening without holding any key. Speak commands or prompts naturally — Vani pastes and sends automatically.",
   },
   {
-    category: "Chained Open + Type & Send",
-    examples: [
-      "Open Antigravity and type <prompt>",
-      "Open ChatGPT and ask <question>",
-      "Open Chrome and search <topic>",
-    ],
-    desc: "Opens the app, focuses its chat or input box, cleans your speech, and sends it straight away without touching Enter.",
-  },
-  {
-    category: "Quick Input Controls",
-    examples: ["Start typing", "New line", "Select all", "Clear input"],
-    desc: "Control chat input focus and editing completely hands-free across any app.",
+    category: "Chained Open + Type & Controls",
+    examples: ["Open Antigravity and type <prompt>", "Start typing", "New line", "Clear input"],
+    desc: "Opens any app, focuses its chat/input box, and sends your message straight away without touching Enter.",
   },
 ];
 
@@ -58,6 +59,22 @@ function describeParsedAction(parsed) {
   switch (a.kind) {
     case "stopHandsFree":
       return { badge: "Stop Hands-Free", steps: ["Exit Hands-Free listening mode & hide HUD"] };
+    case "browserNewTab":
+      return {
+        badge: a.query ? "New Tab & Search" : "New Browser Tab",
+        steps: [
+          ...(a.browserName ? [`Activate ${a.browserName}`] : []),
+          "Open new tab (⌘T / Ctrl+T)",
+          ...(a.query ? [`Search “${a.query}” & press Enter`] : []),
+        ],
+      };
+    case "browserCloseTab":
+      return { badge: "Close Tab", steps: ["Close active browser tab (⌘W / Ctrl+W)"] };
+    case "browserSearchSite":
+      return {
+        badge: `Search ${a.siteName}`,
+        steps: [`Open ${a.siteName} search for “${a.query}” in browser`],
+      };
     case "openApp":
       return {
         badge: a.isWeb ? "Open Web App" : "Open App",
