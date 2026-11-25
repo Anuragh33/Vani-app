@@ -217,11 +217,9 @@ export function FloatingHudPill({
   showMode = true,
   glass = true,
   handsFree = false,
-  onCancel,
 }) {
   const recording = phase === "recording";
   const processing = phase === "processing";
-  const [hovered, setHovered] = useState(false);
 
   const smoothLevels = useSmoothLevels(rawLevels, recording, simulatedEnergy);
   const peak = Math.max(...smoothLevels);
@@ -229,8 +227,6 @@ export function FloatingHudPill({
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{
         height: compact ? 32 : 40,
         paddingLeft: compact ? 11 : 14,
@@ -332,28 +328,6 @@ export function FloatingHudPill({
             >
               {modeLabel}
             </span>
-          )}
-
-          {hovered && onCancel && (
-            <button
-              type="button"
-              onClick={onCancel}
-              aria-label="Cancel dictation"
-              style={{
-                height: 19,
-                width: 19,
-                borderRadius: 999,
-                border: "none",
-                background: "rgba(255,255,255,0.14)",
-                color: "rgba(255,255,255,0.85)",
-                fontSize: 10,
-                cursor: "pointer",
-                display: "grid",
-                placeItems: "center",
-              }}
-            >
-              ✕
-            </button>
           )}
         </>
       )}
@@ -706,7 +680,7 @@ export default function Overlay() {
         pointerEvents: "none",
       }}
     >
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, pointerEvents: "none" }}>
         <FloatingHudPill
           phase={phase}
           levels={recorder.levels}
@@ -719,10 +693,6 @@ export default function Overlay() {
           showMode={hudCfg.hudShowMode}
           glass={hudCfg.hudGlass}
           handsFree={handsFreeMode}
-          onCancel={() => {
-            recorder.cancel?.();
-            scheduleHide(0);
-          }}
         />
         {showBottom && <BottomHudPill phase={phase} text={text} visible={showBottom && visible} glass={hudCfg.hudGlass} />}
       </div>

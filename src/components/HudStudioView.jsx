@@ -591,7 +591,6 @@ export default function HudStudioView({ settings, systemInfo, onSaveSettings, on
                 showTimer={hudShowTimer}
                 showMode={hudShowMode}
                 glass={hudGlass}
-                onCancel={() => setPhase("idle")}
               />
             )}
             {showBottom && (

@@ -476,10 +476,10 @@ pub async fn dictation_complete(
                 }
             }
 
-            if let Some(ref target) = exec.target_app {
-                if let Ok(mut fm) = state.frontmost_app.lock() {
-                    *fm = Some(target.clone());
-                }
+            if let Ok(mut fm) = state.frontmost_app.lock() {
+                // Update to the newly focused app, or clear stale cached app (e.g. Finder) when
+                // opening a web app so subsequent hands-free speech uses the live frontmost window.
+                *fm = exec.target_app.clone();
             }
 
             return Ok(serde_json::json!({
@@ -568,7 +568,7 @@ pub async fn inject_overlay_text(
     let mode = tokio::task::spawn_blocking(move || -> Result<String, String> {
         let mode = crate::inject::paste_to_app(&text_clone, target_clone.as_deref())
             .map_err(|e| e.to_string())?;
-        if should_send {
+        if should_send && mode != "skipped-no-input" {
             std::thread::sleep(std::time::Duration::from_millis(120));
             let _ = crate::inject::send_enter();
         }
@@ -576,6 +576,10 @@ pub async fn inject_overlay_text(
     })
     .await
     .map_err(|e| e.to_string())??;
+
+    if mode == "skipped-no-input" {
+        return Ok(serde_json::json!({ "ok": true, "mode": mode, "skipped": true }));
+    }
 
     let is_privacy = privacy_mode.unwrap_or(settings.privacy_mode);
 

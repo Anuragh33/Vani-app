@@ -45,18 +45,81 @@ fn inject_via_applescript(text: &str) -> Result<String> {
 }
 
 /// Copy text to clipboard then activate the target app and send Cmd+V (macOS) or Ctrl+V (Windows).
+/// On macOS, refuses to send Cmd+V into Finder or System Settings when no editable text field
+/// is focused — preventing macOS Finder from creating `.textClipping` document files on the Desktop
+/// or inside open folders.
 pub fn paste_to_app(text: &str, app_name: Option<&str>) -> Result<String> {
-    copy_to_clipboard(text)?;
-
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
-        let activate = app_name
-            .map(|name| {
-                let safe = name.replace('"', "");
-                format!("tell application \"{}\" to activate\ndelay 0.2\n", safe)
-            })
+
+        // Inspect live frontmost app + focused UI element BEFORE touching the clipboard.
+        // If another app (e.g. Safari/Antigravity/ChatGPT) is already frontmost, prefer it
+        // over a potentially stale cached `app_name` (such as "Finder" from before opening a web app).
+        let check_script = r#"
+tell application "System Events"
+  set frontProc to first application process whose frontmost is true
+  set pName to name of frontProc
+  set isText to "0"
+  try
+    set focusedEl to value of attribute "AXFocusedUIElement" of frontProc
+    set r to value of attribute "AXRole" of focusedEl
+    if r is "AXTextField" or r is "AXTextArea" or r is "AXSearchField" or r is "AXComboBox" then
+      set isText to "1"
+    end if
+  end try
+  return pName & "|" & isText
+end tell
+"#;
+        let check_out = Command::new("osascript")
+            .arg("-e")
+            .arg(check_script)
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
+
+        let (live_front, has_text_focus) = match check_out.split_once('|') {
+            Some((name, flag)) => (name.trim(), flag.trim() == "1"),
+            None => ("", false),
+        };
+
+        let live_is_vani = live_front.is_empty()
+            || live_front.eq_ignore_ascii_case("vani")
+            || live_front.eq_ignore_ascii_case("vani-app");
+
+        // Determine the effective app that will receive Cmd+V
+        let effective_target: Option<&str> = if !live_is_vani {
+            Some(live_front)
+        } else {
+            app_name
+        };
+
+        // Guard: Never paste into Finder (Desktop/folder view) or System Settings unless a text field
+        // is actually focused — otherwise Finder creates `Pasted ...textClipping` files on Desktop!
+        if let Some(target) = effective_target {
+            if target.eq_ignore_ascii_case("Finder") || target.eq_ignore_ascii_case("System Settings") {
+                if live_is_vani || !has_text_focus {
+                    return Ok("skipped-no-input".into());
+                }
+            }
+        }
+
+        copy_to_clipboard(text)?;
+
+        // Only activate `app_name` if VANI itself was frontmost; otherwise paste straight into the
+        // live frontmost app the user is currently interacting with.
+        let activate = if live_is_vani {
+            app_name
+                .map(|name| {
+                    let safe = name.replace('"', "");
+                    format!("tell application \"{}\" to activate\ndelay 0.18\n", safe)
+                })
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+
         let script = format!(
             "{}tell application \"System Events\" to keystroke \"v\" using command down",
             activate
@@ -67,6 +130,7 @@ pub fn paste_to_app(text: &str, app_name: Option<&str>) -> Result<String> {
 
     #[cfg(target_os = "windows")]
     {
+        copy_to_clipboard(text)?;
         use std::mem::size_of;
         use std::time::Duration;
         use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
@@ -118,7 +182,10 @@ pub fn paste_to_app(text: &str, app_name: Option<&str>) -> Result<String> {
     }
 
     #[allow(unreachable_code)]
-    Err(anyhow::anyhow!("paste not implemented on this platform"))
+    {
+        let _ = (text, app_name);
+        Err(anyhow::anyhow!("paste not implemented on this platform"))
+    }
 }
 
 pub fn copy_to_clipboard(text: &str) -> Result<()> {
