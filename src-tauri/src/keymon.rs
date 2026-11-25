@@ -507,8 +507,13 @@ pub fn toggle_hands_free_mode(app: &AppHandle, promote_from_ptt: bool) {
 
     if promote_from_ptt {
         if let Some(w) = app.get_webview_window("overlay") {
-            let _ = w.show();
-            let _ = w.set_always_on_top(true);
+            #[cfg(target_os = "macos")]
+            crate::macos_overlay::show_overlay_non_activating(app, &w);
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = w.show();
+                let _ = w.set_always_on_top(true);
+            }
             let _ = w.emit("hands-free-start", serde_json::json!({ "alreadyRecording": true }));
         }
         return;
@@ -525,30 +530,24 @@ pub fn toggle_hands_free_mode(app: &AppHandle, promote_from_ptt: bool) {
     *state.frontmost_app.lock().unwrap() = frontmost.clone();
 
     if let Some(w) = app.get_webview_window("overlay") {
-        #[cfg(target_os = "windows")]
-        let _ = w.set_focusable(false);
-
         position_overlay(app, &w);
-        let _ = w.show();
-        let _ = w.set_always_on_top(true);
 
         #[cfg(target_os = "macos")]
-        if let Some(name) = &frontmost {
-            let safe = name.replace('"', "");
-            let _ = std::process::Command::new("osascript")
-                .arg("-e")
-                .arg(format!("tell application \"{}\" to activate", safe))
-                .spawn();
-        }
+        crate::macos_overlay::show_overlay_non_activating(app, &w);
 
         #[cfg(target_os = "windows")]
-        if let Some(tag) = &frontmost {
-            if let Some(raw) = tag.strip_prefix("hwnd:") {
-                if let Ok(addr) = raw.parse::<usize>() {
-                    unsafe {
-                        windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow(
-                            addr as *mut std::ffi::c_void,
-                        );
+        {
+            let _ = w.set_focusable(false);
+            let _ = w.show();
+            let _ = w.set_always_on_top(true);
+            if let Some(tag) = &frontmost {
+                if let Some(raw) = tag.strip_prefix("hwnd:") {
+                    if let Ok(addr) = raw.parse::<usize>() {
+                        unsafe {
+                            windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow(
+                                addr as *mut std::ffi::c_void,
+                            );
+                        }
                     }
                 }
             }
@@ -583,31 +582,24 @@ pub fn begin_overlay_dictation(app: &AppHandle) {
     let promoted = is_hands_free_now(app);
 
     if let Some(w) = app.get_webview_window("overlay") {
-        #[cfg(target_os = "windows")]
-        let _ = w.set_focusable(false);
-
         position_overlay(app, &w);
-        let _ = w.show();
-        let _ = w.set_always_on_top(true);
 
-        // Re-activate the target app so keyboard focus stays where the user was typing
         #[cfg(target_os = "macos")]
-        if let Some(name) = &frontmost {
-            let safe = name.replace('"', "");
-            let _ = std::process::Command::new("osascript")
-                .arg("-e")
-                .arg(format!("tell application \"{}\" to activate", safe))
-                .spawn();
-        }
+        crate::macos_overlay::show_overlay_non_activating(app, &w);
 
         #[cfg(target_os = "windows")]
-        if let Some(tag) = &frontmost {
-            if let Some(raw) = tag.strip_prefix("hwnd:") {
-                if let Ok(addr) = raw.parse::<usize>() {
-                    unsafe {
-                        windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow(
-                            addr as *mut std::ffi::c_void,
-                        );
+        {
+            let _ = w.set_focusable(false);
+            let _ = w.show();
+            let _ = w.set_always_on_top(true);
+            if let Some(tag) = &frontmost {
+                if let Some(raw) = tag.strip_prefix("hwnd:") {
+                    if let Ok(addr) = raw.parse::<usize>() {
+                        unsafe {
+                            windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow(
+                                addr as *mut std::ffi::c_void,
+                            );
+                        }
                     }
                 }
             }

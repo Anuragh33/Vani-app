@@ -4,6 +4,8 @@ mod commands;
 mod config;
 mod inject;
 mod keymon;
+#[cfg(target_os = "macos")]
+mod macos_overlay;
 mod models;
 mod parakeet;
 mod transcribe;
@@ -80,6 +82,9 @@ fn toggle_dashboard(app: &AppHandle) {
 
 fn show_overlay(app: &AppHandle) {
     if let Some(w) = get_overlay(app) {
+        #[cfg(target_os = "macos")]
+        macos_overlay::show_overlay_non_activating(app, &w);
+        #[cfg(not(target_os = "macos"))]
         let _ = w.show();
         let _ = w.emit("overlay-shown", ());
     }
@@ -87,6 +92,9 @@ fn show_overlay(app: &AppHandle) {
 
 fn hide_overlay(app: &AppHandle) {
     if let Some(w) = get_overlay(app) {
+        #[cfg(target_os = "macos")]
+        macos_overlay::hide_overlay_non_activating(app, &w);
+        #[cfg(not(target_os = "macos"))]
         let _ = w.hide();
     }
 }
@@ -229,6 +237,9 @@ pub fn run() {
 
             // Start native push-to-talk key monitor (Option on macOS, Right Alt on Windows)
             keymon::start_option_key_monitor(app.handle().clone());
+
+            #[cfg(target_os = "macos")]
+            macos_overlay::init_overlay_window(app.handle());
 
             #[cfg(target_os = "windows")]
             if let Some(ov) = get_overlay(app.handle()) {
