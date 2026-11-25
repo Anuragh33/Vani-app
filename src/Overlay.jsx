@@ -484,9 +484,7 @@ export default function Overlay() {
   const doInject = useCallback(
     async (injText) => {
       await window.vani?.injectOverlayText?.({ text: injText, ...meta });
-      setPhase("done");
-      setText("Done");
-      scheduleHide(360);
+      scheduleHide(0);
     },
     [meta, scheduleHide]
   );
@@ -524,9 +522,7 @@ export default function Overlay() {
           return;
         }
         if (result.command === "delete" || result.command === "undo") {
-          setPhase("done");
-          setText(result.command === "undo" ? "Undone" : "Deleted");
-          scheduleHide(600);
+          scheduleHide(0);
           return;
         }
         setMeta({
@@ -584,7 +580,7 @@ export default function Overlay() {
   }, [recorder, stopClock]);
 
   const showTop = phase === "recording" || phase === "processing";
-  const showBottom = phase === "done" || phase === "error";
+  const showBottom = phase === "error";
 
   return (
     <div

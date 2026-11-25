@@ -169,11 +169,10 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
     setPhase("recording");
     timersRef.current.push(
       setTimeout(() => setPhase("processing"), 2600),
-      setTimeout(() => setPhase("done"), 4200),
       setTimeout(() => {
         setPhase("idle");
         setCycling(false);
-      }, 6400)
+      }, 4200)
     );
   };
 
@@ -187,7 +186,7 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
       : "top-11 left-1/2 -translate-x-1/2";
 
   const showTop = phase === "recording" || phase === "processing";
-  const showBottom = phase === "done" || phase === "error";
+  const showBottom = phase === "error";
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -235,7 +234,6 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
               ["idle", "Idle"],
               ["recording", "Recording"],
               ["processing", "Transcribing"],
-              ["done", "Pasted"],
               ["error", "Error"],
             ].map(([key, label]) => (
               <button

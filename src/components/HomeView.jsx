@@ -68,7 +68,6 @@ function FloatingPillSandbox({ settings, onOpenHudStudio }) {
           {[
             ["recording", "Rec"],
             ["processing", "AI"],
-            ["done", "Done"],
             ["error", "Err"],
           ].map(([key, label]) => (
             <button
@@ -102,10 +101,10 @@ function FloatingPillSandbox({ settings, onOpenHudStudio }) {
             glass={settings.hudGlass !== false}
           />
         )}
-        {(previewPhase === "done" || previewPhase === "error") && (
+        {previewPhase === "error" && (
           <BottomHudPill
-            phase={previewPhase}
-            text={previewPhase === "done" ? "Done" : "Microphone permission needed"}
+            phase="error"
+            text="Microphone permission needed"
             visible
             glass={settings.hudGlass !== false}
           />
