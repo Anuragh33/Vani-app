@@ -143,7 +143,18 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
 
   const enabled = settings.voiceActionsEnabled !== false;
   const autoSend = settings.handsFreeAutoSend !== false;
+  const exitMode = settings.handsFreeExitMode || "shortcut_or_esc";
+  const idleTimeoutSec = settings.handsFreeIdleTimeoutSec ?? 60;
   const aliases = settings.appAliases || [];
+
+  const exitSummaryText =
+    exitMode === "shortcut_or_esc"
+      ? `Press ${handsFreeKey}, hit Esc, or say “Stop listening”`
+      : exitMode === "same_shortcut"
+      ? `Press ${handsFreeKey} again or say “Stop listening”`
+      : exitMode === "single_option"
+      ? `Single-tap ${pushToTalkKey}, press ${handsFreeKey}, or say “Stop listening”`
+      : `Say “Stop listening” or click the menu bar icon`;
 
   useEffect(() => {
     let active = true;
@@ -275,15 +286,52 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
           <kbd className="vani-kbd shrink-0 font-mono text-xs">{pushToTalkKey}</kbd>
         </div>
 
-        <div className="vani-card flex items-start justify-between gap-4 border-emerald-500/30 p-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--emerald)]">Completely Hands-Free</p>
-            <p className="mt-1 text-sm font-semibold text-[var(--text)]">Tap {handsFreeKey} Once → Speak Naturally</p>
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              Zero keys held. Opens apps, pastes your words directly into Antigravity, Chrome, Safari, or ChatGPT, and sends automatically without pressing Enter. Say “Stop listening” or tap {handsFreeKey} to exit.
-            </p>
+        <div className="vani-card flex flex-col justify-between gap-3 border-emerald-500/30 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--emerald)]">Completely Hands-Free</p>
+              <p className="mt-1 text-sm font-semibold text-[var(--text)]">Enter: Tap {handsFreeKey} Once</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                Zero keys held. Opens apps, navigates Settings &amp; Finder, pastes directly into any app, and sends automatically without pressing Enter.
+              </p>
+              <p className="mt-1.5 text-xs text-[var(--text-soft)]">
+                <strong className="text-[var(--emerald)]">Exit:</strong> {exitSummaryText}
+                {idleTimeoutSec > 0 ? ` (or auto-exits after ${idleTimeoutSec >= 60 ? `${idleTimeoutSec / 60}m` : `${idleTimeoutSec}s`} idle)` : ""}.
+              </p>
+            </div>
+            <kbd className="vani-kbd shrink-0 font-mono text-xs text-[var(--emerald)]">{handsFreeKey}</kbd>
           </div>
-          <kbd className="vani-kbd shrink-0 font-mono text-xs text-[var(--emerald)]">{handsFreeKey}</kbd>
+          <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2.5">
+            <span className="text-[11px] font-medium text-[var(--muted)]">Exit trigger:</span>
+            <select
+              value={exitMode}
+              onChange={(e) => {
+                onSaveSettings({ handsFreeExitMode: e.target.value });
+                onNotify?.("Updated Hands-Free exit trigger");
+              }}
+              className="vani-input py-1 text-[11px] w-auto"
+            >
+              <option value="shortcut_or_esc">{handsFreeKey} or Esc</option>
+              <option value="same_shortcut">{handsFreeKey} only</option>
+              <option value="single_option">Tap {pushToTalkKey}</option>
+              <option value="voice_only">Voice only (“Stop listening”)</option>
+            </select>
+            <select
+              value={idleTimeoutSec}
+              onChange={(e) => {
+                onSaveSettings({ handsFreeIdleTimeoutSec: Number(e.target.value) });
+                onNotify?.("Updated Hands-Free idle timeout");
+              }}
+              className="vani-input py-1 text-[11px] w-auto"
+              title="Auto-exit after silence"
+            >
+              <option value={30}>Idle: 30s</option>
+              <option value={60}>Idle: 1m</option>
+              <option value={120}>Idle: 2m</option>
+              <option value={300}>Idle: 5m</option>
+              <option value={0}>Idle: Off</option>
+            </select>
+          </div>
         </div>
       </div>
 

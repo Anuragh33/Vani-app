@@ -11,7 +11,8 @@ use std::sync::{Arc, Mutex};
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop};
 #[cfg(target_os = "macos")]
 use core_graphics::event::{
-    CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
+    CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement,
+    CGEventType, EventField,
 };
 
 #[cfg(target_os = "macos")]
@@ -31,6 +32,33 @@ pub fn is_accessibility_trusted() -> bool {
     }
 }
 
+fn get_hands_free_exit_mode(app: &AppHandle) -> String {
+    app.state::<AppState>()
+        .store
+        .lock()
+        .map(|s| s.settings().hands_free_exit_mode.clone())
+        .unwrap_or_else(|_| "shortcut_or_esc".into())
+}
+
+fn is_hands_free_now(app: &AppHandle) -> bool {
+    app.state::<AppState>()
+        .hands_free_active
+        .lock()
+        .map(|g| *g)
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Default)]
+struct MacKeyState {
+    option_down: bool,
+    cmd_down: bool,
+    ptt_active: bool,
+    ptt_gen: u64,
+    combo_latched: bool,
+    option_tap_exit_armed: bool,
+}
+
 #[cfg(target_os = "macos")]
 pub fn start_option_key_monitor(app: AppHandle) {
     std::thread::spawn(move || {
@@ -43,62 +71,121 @@ pub fn start_option_key_monitor(app: AppHandle) {
             }
 
             let app_ref = app.clone();
-            // Track (ptt_held, combo_down) for seamless Option (PTT) vs Option+Command (Hands-Free toggle)
-            let key_state = Arc::new(Mutex::new((false, false)));
+            let key_state = Arc::new(Mutex::new(MacKeyState::default()));
             let key_state_clone = key_state.clone();
 
             let tap = CGEventTap::new(
                 CGEventTapLocation::Session,
                 CGEventTapPlacement::HeadInsertEventTap,
                 CGEventTapOptions::ListenOnly,
-                vec![CGEventType::FlagsChanged],
-                move |_proxy, _event_type, event| {
+                vec![CGEventType::FlagsChanged, CGEventType::KeyDown],
+                move |_proxy, event_type, event| {
+                    // Handle KeyDown: Esc exits Hands-Free (when configured), and any normal
+                    // key pressed while Option is held cancels pending 80ms PTT activation so
+                    // shortcuts like Option+Arrow / Option+Delete never falsely trigger VANI.
+                    if matches!(event_type, CGEventType::KeyDown) {
+                        let keycode = event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE);
+                        {
+                            let mut st = key_state_clone.lock().unwrap();
+                            st.ptt_gen = st.ptt_gen.wrapping_add(1);
+                            st.option_tap_exit_armed = false;
+                        }
+                        if keycode == 53 && is_hands_free_now(&app_ref) {
+                            if get_hands_free_exit_mode(&app_ref) == "shortcut_or_esc" {
+                                let app_bg = app_ref.clone();
+                                std::thread::spawn(move || exit_hands_free_mode(&app_bg));
+                            }
+                        }
+                        return None;
+                    }
+
                     let flags = event.get_flags();
                     let option_down = flags.contains(CGEventFlags::CGEventFlagAlternate);
                     let cmd_down = flags.contains(CGEventFlags::CGEventFlagCommand);
                     let ctrl_down = flags.contains(CGEventFlags::CGEventFlagControl);
 
                     let mut st = key_state_clone.lock().unwrap();
-                    let (ref mut ptt_held, ref mut combo_down) = *st;
+                    let prev_option = st.option_down;
+                    st.option_down = option_down;
+                    st.cmd_down = cmd_down;
 
-                    // 1. Option + Command together -> Toggle TRUE Hands-Free Mode!
+                    // 1. Option + Command together -> Toggle TRUE Hands-Free Mode immediately
                     if option_down && cmd_down && !ctrl_down {
-                        if !*combo_down {
-                            *combo_down = true;
-                            let was_ptt = *ptt_held;
-                            *ptt_held = false;
+                        st.ptt_gen = st.ptt_gen.wrapping_add(1);
+                        st.option_tap_exit_armed = false;
+                        if !st.combo_latched {
+                            st.combo_latched = true;
+                            let was_ptt = st.ptt_active;
+                            st.ptt_active = false;
                             drop(st);
                             let app_bg = app_ref.clone();
                             std::thread::spawn(move || toggle_hands_free_mode(&app_bg, was_ptt));
                         }
                         return None;
-                    } else {
-                        *combo_down = false;
                     }
 
-                    // 2. If Hands-Free Mode is active, releasing Option alone does NOT cancel it
-                    let is_hf = app_ref
-                        .state::<AppState>()
-                        .hands_free_active
-                        .lock()
-                        .map(|g| *g)
-                        .unwrap_or(false);
-                    if is_hf {
-                        *ptt_held = false;
+                    // Only clear the combo latch once BOTH Option and Command are released,
+                    // preventing releasing Command 20ms before Option from flashing Push-to-Talk.
+                    if !option_down && !cmd_down {
+                        st.combo_latched = false;
+                    }
+
+                    // 2. While Hands-Free Mode is active:
+                    if is_hands_free_now(&app_ref) {
+                        st.ptt_active = false;
+                        st.ptt_gen = st.ptt_gen.wrapping_add(1);
+
+                        if get_hands_free_exit_mode(&app_ref) == "single_option" {
+                            if option_down && !prev_option && !cmd_down && !ctrl_down && !st.combo_latched {
+                                st.option_tap_exit_armed = true;
+                            } else if !option_down && st.option_tap_exit_armed {
+                                st.option_tap_exit_armed = false;
+                                drop(st);
+                                let app_bg = app_ref.clone();
+                                std::thread::spawn(move || exit_hands_free_mode(&app_bg));
+                                return None;
+                            }
+                        }
                         return None;
                     }
 
-                    // 3. Push-to-Talk: Hold Option alone -> record; release -> transcribe
-                    if option_down && !cmd_down && !ctrl_down && !*ptt_held {
-                        *ptt_held = true;
+                    // 3. Push-to-Talk: Hold Option alone -> wait 80ms chord window so Option+Command
+                    //    never races with Push-to-Talk, then start recording; release -> transcribe.
+                    if option_down && !prev_option && !cmd_down && !ctrl_down && !st.combo_latched && !st.ptt_active {
+                        st.ptt_gen = st.ptt_gen.wrapping_add(1);
+                        let my_gen = st.ptt_gen;
                         drop(st);
+                        let state_timer = key_state_clone.clone();
                         let app_bg = app_ref.clone();
-                        std::thread::spawn(move || begin_overlay_dictation(&app_bg));
-                    } else if (!option_down || ctrl_down) && *ptt_held {
-                        *ptt_held = false;
-                        drop(st);
-                        let app_bg = app_ref.clone();
-                        std::thread::spawn(move || end_overlay_dictation(&app_bg));
+                        std::thread::spawn(move || {
+                            std::thread::sleep(Duration::from_millis(80));
+                            let should_start = {
+                                let mut s = state_timer.lock().unwrap();
+                                if s.ptt_gen == my_gen
+                                    && s.option_down
+                                    && !s.cmd_down
+                                    && !s.combo_latched
+                                    && !s.ptt_active
+                                    && !is_hands_free_now(&app_bg)
+                                {
+                                    s.ptt_active = true;
+                                    true
+                                } else {
+                                    false
+                                }
+                            };
+                            if should_start {
+                                begin_overlay_dictation(&app_bg);
+                            }
+                        });
+                    } else if (!option_down || ctrl_down || cmd_down) && (st.ptt_active || prev_option) {
+                        st.ptt_gen = st.ptt_gen.wrapping_add(1);
+                        if st.ptt_active {
+                            st.ptt_active = false;
+                            drop(st);
+                            let app_bg = app_ref.clone();
+                            std::thread::spawn(move || end_overlay_dictation(&app_bg));
+                        }
                     }
                     None
                 },
@@ -110,7 +197,7 @@ pub fn start_option_key_monitor(app: AppHandle) {
                         let run_loop = CFRunLoop::get_current();
                         run_loop.add_source(&loop_source, unsafe { kCFRunLoopCommonModes });
                         tap.enable();
-                        eprintln!("VANI: Option (PTT) + Option+Command (Hands-Free) CGEventTap active.");
+                        eprintln!("VANI: Option (PTT) + Option+Command (Hands-Free) + Esc exit CGEventTap active.");
                         CFRunLoop::run_current();
                     }
                 }
@@ -128,10 +215,11 @@ pub fn start_option_key_monitor(app: AppHandle) {
 mod win_hook {
     use super::*;
     use once_cell::sync::OnceCell;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        GetAsyncKeyState, VK_CONTROL, VK_LCONTROL, VK_LWIN, VK_RCONTROL, VK_RMENU, VK_RWIN,
+        GetAsyncKeyState, VK_CONTROL, VK_ESCAPE, VK_LCONTROL, VK_LWIN, VK_RCONTROL, VK_RMENU,
+        VK_RWIN,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
@@ -139,8 +227,11 @@ mod win_hook {
     };
 
     static APP_HANDLE: OnceCell<AppHandle> = OnceCell::new();
-    static RALT_PRESSED: AtomicBool = AtomicBool::new(false);
-    static COMBO_DOWN: AtomicBool = AtomicBool::new(false);
+    static RALT_DOWN: AtomicBool = AtomicBool::new(false);
+    static PTT_ACTIVE: AtomicBool = AtomicBool::new(false);
+    static PTT_GEN: AtomicU64 = AtomicU64::new(0);
+    static COMBO_LATCHED: AtomicBool = AtomicBool::new(false);
+    static RALT_TAP_EXIT_ARMED: AtomicBool = AtomicBool::new(false);
 
     unsafe extern "system" fn ll_keyboard_proc(
         code: i32,
@@ -159,9 +250,28 @@ mod win_hook {
                 || vk == VK_LCONTROL as u32
                 || vk == VK_RCONTROL as u32;
 
+            // Escape exits Hands-Free immediately when configured
+            if is_down && vk == VK_ESCAPE as u32 {
+                if let Some(app) = APP_HANDLE.get() {
+                    if is_hands_free_now(app) && get_hands_free_exit_mode(app) == "shortcut_or_esc" {
+                        let app_bg = app.clone();
+                        std::thread::spawn(move || exit_hands_free_mode(&app_bg));
+                    }
+                }
+                return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
+            }
+
+            // Any non-modifier key cancels pending 80ms PTT timer (prevents AltGr shortcuts flashing VANI)
+            if is_down && !is_ralt && !is_ctrl {
+                PTT_GEN.fetch_add(1, Ordering::SeqCst);
+                RALT_TAP_EXIT_ARMED.store(false, Ordering::SeqCst);
+                return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
+            }
+
             if is_ralt || is_ctrl {
                 let win_down = GetAsyncKeyState(VK_LWIN as i32) < 0
                     || GetAsyncKeyState(VK_RWIN as i32) < 0;
+                let prev_ralt = RALT_DOWN.load(Ordering::SeqCst);
                 let ralt_now = if is_ralt {
                     is_down
                 } else {
@@ -173,46 +283,66 @@ mod win_hook {
                     GetAsyncKeyState(VK_LCONTROL as i32) < 0
                         || GetAsyncKeyState(VK_RCONTROL as i32) < 0
                 };
+                if is_ralt {
+                    RALT_DOWN.store(is_down, Ordering::SeqCst);
+                }
 
-                // 1. Right Alt + Ctrl together -> Toggle Hands-Free Mode
+                // 1. Right Alt + Ctrl together -> Toggle Hands-Free Mode immediately
                 if ralt_now && ctrl_now && !win_down {
-                    if !COMBO_DOWN.swap(true, Ordering::SeqCst) {
-                        let was_ptt = RALT_PRESSED.swap(false, Ordering::SeqCst);
+                    PTT_GEN.fetch_add(1, Ordering::SeqCst);
+                    RALT_TAP_EXIT_ARMED.store(false, Ordering::SeqCst);
+                    if !COMBO_LATCHED.swap(true, Ordering::SeqCst) {
+                        let was_ptt = PTT_ACTIVE.swap(false, Ordering::SeqCst);
                         if let Some(app) = APP_HANDLE.get() {
                             let app_bg = app.clone();
                             std::thread::spawn(move || toggle_hands_free_mode(&app_bg, was_ptt));
                         }
                     }
                     return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
-                } else if is_up {
-                    COMBO_DOWN.store(false, Ordering::SeqCst);
                 }
 
-                // 2. If Hands-Free Mode is active, releasing Right Alt alone doesn't stop it
+                if !ralt_now && !ctrl_now {
+                    COMBO_LATCHED.store(false, Ordering::SeqCst);
+                }
+
+                // 2. While Hands-Free Mode is active
                 if let Some(app) = APP_HANDLE.get() {
-                    let is_hf = app
-                        .state::<AppState>()
-                        .hands_free_active
-                        .lock()
-                        .map(|g| *g)
-                        .unwrap_or(false);
-                    if is_hf {
-                        RALT_PRESSED.store(false, Ordering::SeqCst);
+                    if is_hands_free_now(app) {
+                        PTT_ACTIVE.store(false, Ordering::SeqCst);
+                        PTT_GEN.fetch_add(1, Ordering::SeqCst);
+                        if get_hands_free_exit_mode(app) == "single_option" && is_ralt {
+                            if is_down && !prev_ralt && !ctrl_now && !win_down && !COMBO_LATCHED.load(Ordering::SeqCst) {
+                                RALT_TAP_EXIT_ARMED.store(true, Ordering::SeqCst);
+                            } else if is_up && RALT_TAP_EXIT_ARMED.swap(false, Ordering::SeqCst) {
+                                let app_bg = app.clone();
+                                std::thread::spawn(move || exit_hands_free_mode(&app_bg));
+                            }
+                        }
                         return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
                     }
                 }
 
-                // 3. Push-to-Talk: Hold Right Alt alone
+                // 3. Push-to-Talk: Hold Right Alt alone with 80ms chord disambiguation
                 if is_ralt {
-                    if is_down && !win_down && !ctrl_now {
-                        if !RALT_PRESSED.swap(true, Ordering::SeqCst) {
-                            if let Some(app) = APP_HANDLE.get() {
-                                let app_bg = app.clone();
-                                std::thread::spawn(move || begin_overlay_dictation(&app_bg));
-                            }
+                    if is_down && !prev_ralt && !win_down && !ctrl_now && !COMBO_LATCHED.load(Ordering::SeqCst) && !PTT_ACTIVE.load(Ordering::SeqCst) {
+                        let my_gen = PTT_GEN.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
+                        if let Some(app) = APP_HANDLE.get() {
+                            let app_bg = app.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(Duration::from_millis(80));
+                                if PTT_GEN.load(Ordering::SeqCst) == my_gen
+                                    && RALT_DOWN.load(Ordering::SeqCst)
+                                    && !COMBO_LATCHED.load(Ordering::SeqCst)
+                                    && !is_hands_free_now(&app_bg)
+                                    && !PTT_ACTIVE.swap(true, Ordering::SeqCst)
+                                {
+                                    begin_overlay_dictation(&app_bg);
+                                }
+                            });
                         }
                     } else if is_up {
-                        if RALT_PRESSED.swap(false, Ordering::SeqCst) {
+                        PTT_GEN.fetch_add(1, Ordering::SeqCst);
+                        if PTT_ACTIVE.swap(false, Ordering::SeqCst) {
                             if let Some(app) = APP_HANDLE.get() {
                                 let app_bg = app.clone();
                                 std::thread::spawn(move || end_overlay_dictation(&app_bg));
@@ -238,7 +368,7 @@ mod win_hook {
                 eprintln!("VANI: Failed to install Windows WH_KEYBOARD_LL hook.");
                 return;
             }
-            eprintln!("VANI: Windows Right Alt (PTT) + Right Alt+Ctrl (Hands-Free) hook active.");
+            eprintln!("VANI: Windows Right Alt (PTT) + Right Alt+Ctrl (Hands-Free) + Esc exit hook active.");
             let mut msg: MSG = std::mem::zeroed();
             while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
                 TranslateMessage(&msg);
@@ -334,44 +464,56 @@ pub fn position_overlay(app: &AppHandle, w: &tauri::WebviewWindow) {
     }
 }
 
-/// Toggle continuous Hands-Free Mode (⌥+⌘ on macOS, Right Alt+Ctrl on Windows).
-/// If `promote_from_ptt` is true, Option went down a few ms before Command, so we upgrade
-/// the already-starting recording into continuous Hands-Free Mode cleanly!
-pub fn toggle_hands_free_mode(app: &AppHandle, promote_from_ptt: bool) {
+/// Cleanly exit Hands-Free Mode from any trigger (Esc, ⌥+⌘, single-tap ⌥, menu bar icon).
+pub fn exit_hands_free_mode(app: &AppHandle) {
     let state = app.state::<AppState>();
     let mut hf = state.hands_free_active.lock().unwrap();
-    if *hf {
-        // Turn OFF Hands-Free Mode
-        *hf = false;
-        drop(hf);
-        *state.dictation_active.lock().unwrap() = false;
+    if !*hf {
+        return;
+    }
+    *hf = false;
+    drop(hf);
+    *state.dictation_active.lock().unwrap() = false;
 
-        let tray_style = state
-            .store
-            .lock()
-            .map(|s| s.settings().tray_icon_style.clone())
-            .unwrap_or_else(|_| "monochrome".into());
-        tray_icons::apply_tray_style(app, &tray_style, false);
+    let tray_style = state
+        .store
+        .lock()
+        .map(|s| s.settings().tray_icon_style.clone())
+        .unwrap_or_else(|_| "monochrome".into());
+    tray_icons::apply_tray_style(app, &tray_style, false);
 
-        if let Some(w) = app.get_webview_window("overlay") {
-            let _ = w.emit("hands-free-stop", ());
+    if let Some(w) = app.get_webview_window("overlay") {
+        let _ = w.emit("hands-free-stop", ());
+    }
+}
+
+/// Toggle continuous Hands-Free Mode (⌥+⌘ on macOS, Right Alt+Ctrl on Windows).
+/// If `promote_from_ptt` is true, Push-to-Talk was already recording and we upgrade it cleanly.
+pub fn toggle_hands_free_mode(app: &AppHandle, promote_from_ptt: bool) {
+    let state = app.state::<AppState>();
+    let already_hf = *state.hands_free_active.lock().unwrap();
+    if already_hf {
+        // Respect "voice_only" exit setting (user still has voice "Stop listening" & tray click)
+        if get_hands_free_exit_mode(app) == "voice_only" {
+            return;
         }
+        exit_hands_free_mode(app);
         return;
     }
 
     // Turn ON Hands-Free Mode
-    *hf = true;
-    drop(hf);
+    *state.hands_free_active.lock().unwrap() = true;
+    *state.dictation_active.lock().unwrap() = true;
 
     if promote_from_ptt {
-        // Overlay is already recording from Option arriving 20ms earlier — just promote it!
         if let Some(w) = app.get_webview_window("overlay") {
+            let _ = w.show();
+            let _ = w.set_always_on_top(true);
             let _ = w.emit("hands-free-start", serde_json::json!({ "alreadyRecording": true }));
         }
         return;
     }
 
-    *state.dictation_active.lock().unwrap() = true;
     let tray_style = state
         .store
         .lock()
@@ -419,7 +561,7 @@ pub fn toggle_hands_free_mode(app: &AppHandle, promote_from_ptt: bool) {
 pub fn begin_overlay_dictation(app: &AppHandle) {
     let state = app.state::<AppState>();
     let mut active = state.dictation_active.lock().unwrap();
-    if *active {
+    if *active || is_hands_free_now(app) {
         return;
     }
     *active = true;
@@ -435,6 +577,10 @@ pub fn begin_overlay_dictation(app: &AppHandle) {
     // Capture frontmost app BEFORE showing overlay
     let frontmost = get_frontmost_app();
     *state.frontmost_app.lock().unwrap() = frontmost.clone();
+
+    // Critical race guard: if Hands-Free was toggled while get_frontmost_app() ran,
+    // emit hands-free-start instead of dictation-start so the Hands-Free badge is never wiped!
+    let promoted = is_hands_free_now(app);
 
     if let Some(w) = app.get_webview_window("overlay") {
         #[cfg(target_os = "windows")]
@@ -467,12 +613,19 @@ pub fn begin_overlay_dictation(app: &AppHandle) {
             }
         }
 
-        let _ = w.emit("dictation-start", ());
+        if promoted {
+            let _ = w.emit("hands-free-start", serde_json::json!({ "alreadyRecording": false }));
+        } else {
+            let _ = w.emit("dictation-start", ());
+        }
     }
 }
 
 pub fn end_overlay_dictation(app: &AppHandle) {
     let state = app.state::<AppState>();
+    if is_hands_free_now(app) {
+        return;
+    }
     let mut active = state.dictation_active.lock().unwrap();
     if !*active {
         return;
@@ -493,6 +646,10 @@ pub fn end_overlay_dictation(app: &AppHandle) {
 }
 
 pub fn toggle_overlay_dictation(app: &AppHandle) {
+    if is_hands_free_now(app) {
+        exit_hands_free_mode(app);
+        return;
+    }
     let is_active = app
         .state::<AppState>()
         .dictation_active

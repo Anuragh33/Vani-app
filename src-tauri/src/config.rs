@@ -75,6 +75,10 @@ pub struct Settings {
     pub voice_actions_enabled: bool,
     #[serde(default = "default_true")]
     pub hands_free_auto_send: bool,
+    #[serde(default = "default_hands_free_exit_mode")]
+    pub hands_free_exit_mode: String,
+    #[serde(default = "default_hands_free_idle_timeout_sec")]
+    pub hands_free_idle_timeout_sec: u32,
     #[serde(default)]
     pub app_aliases: Vec<AppAlias>,
 }
@@ -111,6 +115,8 @@ fn default_general() -> String { "general".into() }
 fn default_hud_style() -> String { "breathwave".into() }
 fn default_hud_position() -> String { "top-center".into() }
 fn default_tray_icon_style() -> String { "monochrome".into() }
+fn default_hands_free_exit_mode() -> String { "shortcut_or_esc".into() }
+fn default_hands_free_idle_timeout_sec() -> u32 { 60 }
 
 fn num_cpus() -> u32 {
     std::thread::available_parallelism()

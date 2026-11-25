@@ -376,8 +376,68 @@ export default function SettingsPanel({
               <div>
                 <h2 className="text-base font-semibold text-[var(--text)]">Behavior &amp; Shortcuts</h2>
                 <p className="mt-0.5 text-xs text-[var(--muted)]">
-                  Hold <kbd className="vani-kbd">{pushToTalkKey}</kbd> for push-to-talk dictation anywhere, or customize secondary triggers.
+                  Hold <kbd className="vani-kbd">{pushToTalkKey}</kbd> for Push-to-Talk, or tap{" "}
+                  <kbd className="vani-kbd">{isMac ? "⌥ + ⌘" : "Right Alt + Ctrl"}</kbd> together to enter continuous Hands-Free mode.
                 </p>
+              </div>
+
+              {/* Dedicated Hands-Free Mode Controls */}
+              <div className="rounded-xl border border-emerald-500/25 bg-[var(--bg-elevated)] p-4 space-y-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--text)]">Hands-Free Mode (Enter &amp; Exit)</p>
+                    <p className="mt-0.5 text-xs text-[var(--muted)]">
+                      Enter anytime with <kbd className="vani-kbd">{isMac ? "⌥ + ⌘" : "Right Alt + Ctrl"}</kbd>. Choose how you want to exit Hands-Free mode below.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium text-[var(--text)]">
+                      How to Exit Hands-Free
+                    </label>
+                    <select
+                      value={settings.handsFreeExitMode || "shortcut_or_esc"}
+                      onChange={(e) => onChange({ handsFreeExitMode: e.target.value })}
+                      className="vani-input w-full text-xs"
+                    >
+                      <option value="shortcut_or_esc">
+                        {isMac ? "⌥ + ⌘ or Esc (Recommended)" : "Right Alt + Ctrl or Esc (Recommended)"}
+                      </option>
+                      <option value="same_shortcut">
+                        {isMac ? "Press ⌥ + ⌘ again only" : "Press Right Alt + Ctrl again only"}
+                      </option>
+                      <option value="single_option">
+                        {isMac ? "Single-tap ⌥ Option (or ⌥ + ⌘)" : "Single-tap Right Alt (or Right Alt + Ctrl)"}
+                      </option>
+                      <option value="voice_only">Voice only (“Stop listening”) or menu bar</option>
+                    </select>
+                    <p className="text-[11px] text-[var(--muted)]">
+                      Saying “Stop listening” or “Exit hands-free” always exits immediately too.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium text-[var(--text)]">
+                      Auto-Exit After Silence
+                    </label>
+                    <select
+                      value={settings.handsFreeIdleTimeoutSec ?? 60}
+                      onChange={(e) => onChange({ handsFreeIdleTimeoutSec: Number(e.target.value) })}
+                      className="vani-input w-full text-xs"
+                    >
+                      <option value={30}>30 seconds</option>
+                      <option value={60}>1 minute (Recommended)</option>
+                      <option value={120}>2 minutes</option>
+                      <option value={300}>5 minutes</option>
+                      <option value={0}>Never (stay open until exited)</option>
+                    </select>
+                    <p className="text-[11px] text-[var(--muted)]">
+                      Automatically turns off Hands-Free if no speech is heard so your mic never stays open.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 space-y-2.5">

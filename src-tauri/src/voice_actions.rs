@@ -1221,12 +1221,19 @@ pub fn parse_voice_action(
     // 1. Standalone quick keyboard / tab / hands-free control actions
     match lower.as_str() {
         "stop listening"
+        | "done listening"
         | "stop hands free"
         | "stop hands-free"
         | "exit hands free"
         | "exit hands-free"
         | "turn off hands free"
         | "turn off hands-free"
+        | "close hands free"
+        | "close hands-free"
+        | "end hands free"
+        | "end hands-free"
+        | "cancel hands free"
+        | "cancel hands-free"
         | "stop vani"
         | "goodbye vani" => {
             return Some(VoiceAction::StopHandsFree);

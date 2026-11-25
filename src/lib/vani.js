@@ -111,6 +111,8 @@ function createBrowserPreviewBridge() {
     trayIconStyle: "monochrome",
     voiceActionsEnabled: true,
     handsFreeAutoSend: true,
+    handsFreeExitMode: "shortcut_or_esc",
+    handsFreeIdleTimeoutSec: 60,
     appAliases: [
       { spoken: "editor", target: "Antigravity" },
       { spoken: "browser", target: "Google Chrome" },
