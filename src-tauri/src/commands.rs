@@ -22,6 +22,7 @@ pub struct AppState {
     pub active_downloads: Arc<Mutex<HashMap<String, tokio::task::AbortHandle>>>,
     pub app_data_dir: PathBuf,
     pub dictation_active: Arc<Mutex<bool>>,
+    pub hands_free_active: Arc<Mutex<bool>>,
     pub frontmost_app: Arc<Mutex<Option<String>>>,
     pub native_recording: Arc<Mutex<Option<PlatformRecording>>>,
 }
@@ -46,6 +47,7 @@ pub async fn get_system_info(app: AppHandle) -> Result<serde_json::Value, String
         "isWindows": is_windows,
         "appleAiSupported": apple_ai_supported,
         "pushToTalkKey": if is_mac { "⌥ Option" } else { "Right Alt" },
+        "handsFreeKey": if is_mac { "⌥ + ⌘" } else { "Right Alt + Ctrl" },
         "modifierSymbol": if is_mac { "⌘" } else { "Ctrl+" },
         "dashboardHotkey": if is_mac { "⌘⇧D" } else { "Ctrl+Shift+D" },
         "dictateHotkey": if is_mac { "⌘⇧Space" } else { "Ctrl+Shift+Space" },
@@ -240,8 +242,12 @@ pub async fn dictation_complete(
     wav_buffer: Option<Vec<u8>>,
     wav_path: Option<String>,
     allow_actions: Option<bool>,
+    hands_free: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    {
+    let is_hands_free = hands_free.unwrap_or_else(|| {
+        state.hands_free_active.lock().map(|g| *g).unwrap_or(false)
+    });
+    if !is_hands_free {
         let mut active = state.dictation_active.lock().map_err(|e| e.to_string())?;
         *active = false;
     }
@@ -441,12 +447,34 @@ pub async fn dictation_complete(
                 .map_err(|e| e.to_string())?
                 .clone();
 
+            let auto_send = settings.hands_free_auto_send;
             let exec = tokio::task::spawn_blocking(move || {
-                crate::voice_actions::execute_action(&action, frontmost.as_deref())
+                crate::voice_actions::execute_action(
+                    &action,
+                    frontmost.as_deref(),
+                    is_hands_free,
+                    auto_send,
+                )
             })
             .await
             .map_err(|e| e.to_string())?
             .map_err(|e| e.to_string())?;
+
+            if exec.stop_hands_free {
+                if let Ok(mut hf) = state.hands_free_active.lock() {
+                    *hf = false;
+                }
+                if let Ok(mut da) = state.dictation_active.lock() {
+                    *da = false;
+                }
+            } else if exec.follow_up_dictation {
+                if let Ok(mut hf) = state.hands_free_active.lock() {
+                    *hf = true;
+                }
+                if let Ok(mut da) = state.dictation_active.lock() {
+                    *da = true;
+                }
+            }
 
             if let Some(ref target) = exec.target_app {
                 if let Ok(mut fm) = state.frontmost_app.lock() {
@@ -463,6 +491,7 @@ pub async fn dictation_complete(
                 "actionKind": exec.action_kind,
                 "actionSummary": exec.summary,
                 "followUpDictation": exec.follow_up_dictation,
+                "stopHandsFree": exec.stop_hands_free,
                 "targetApp": exec.target_app
             }));
         }
@@ -520,6 +549,7 @@ pub async fn inject_overlay_text(
     raw_text: Option<String>,
     provider_label: Option<String>,
     privacy_mode: Option<bool>,
+    auto_send: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     let settings = {
         let store = state.store.lock().map_err(|e| e.to_string())?;
@@ -531,8 +561,21 @@ pub async fn inject_overlay_text(
         state.frontmost_app.lock().map_err(|e| e.to_string())?.clone()
     };
 
-    let mode = crate::inject::paste_to_app(&text, target_app.as_deref())
-        .map_err(|e| e.to_string())?;
+    let should_send = auto_send.unwrap_or(false) && settings.hands_free_auto_send;
+    let text_clone = text.clone();
+    let target_clone = target_app.clone();
+
+    let mode = tokio::task::spawn_blocking(move || -> Result<String, String> {
+        let mode = crate::inject::paste_to_app(&text_clone, target_clone.as_deref())
+            .map_err(|e| e.to_string())?;
+        if should_send {
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            let _ = crate::inject::send_enter();
+        }
+        Ok(mode)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
 
     let is_privacy = privacy_mode.unwrap_or(settings.privacy_mode);
 
@@ -936,8 +979,13 @@ pub async fn test_voice_action(
             })),
             Some(action) => {
                 if should_exec {
-                    let exec = crate::voice_actions::execute_action(&action, frontmost.as_deref())
-                        .map_err(|e| e.to_string())?;
+                    let exec = crate::voice_actions::execute_action(
+                        &action,
+                        frontmost.as_deref(),
+                        false,
+                        true,
+                    )
+                    .map_err(|e| e.to_string())?;
                     Ok(serde_json::json!({
                         "matched": true,
                         "action": action,

@@ -216,6 +216,7 @@ export function FloatingHudPill({
   showTimer = true,
   showMode = true,
   glass = true,
+  handsFree = false,
   onCancel,
 }) {
   const recording = phase === "recording";
@@ -268,11 +269,31 @@ export function FloatingHudPill({
               height: compact ? 6 : 7,
               width: compact ? 6 : 7,
               borderRadius: "50%",
-              background: "#f472b6",
-              boxShadow: "0 0 8px rgba(244,114,182,0.95)",
+              background: handsFree ? "#34d399" : "#f472b6",
+              boxShadow: handsFree
+                ? "0 0 8px rgba(52,211,153,0.95)"
+                : "0 0 8px rgba(244,114,182,0.95)",
               flexShrink: 0,
             }}
           />
+
+          {handsFree && !compact && (
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: "#6ee7b7",
+                background: "rgba(52,211,153,0.16)",
+                padding: "2px 6px",
+                borderRadius: 999,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Hands-Free
+            </span>
+          )}
 
           {hudStyle === "bars" ? (
             <EqualizerBars levels={smoothLevels} active={recording} />
@@ -433,6 +454,7 @@ export default function Overlay() {
   const clockRef = useRef(null);
   const startTsRef = useRef(0);
   const recorderRef = useRef(null);
+  const handsFreeRef = useRef(false);
   const [handsFreeMode, setHandsFreeMode] = useState(false);
 
   const stopClock = useCallback(() => {
@@ -441,6 +463,20 @@ export default function Overlay() {
       clockRef.current = null;
     }
   }, []);
+
+  const startHandsFreeTurn = useCallback(() => {
+    if (!handsFreeRef.current) return;
+    setPhase("recording");
+    setText("");
+    setElapsedMs(0);
+    startTsRef.current = Date.now();
+    stopClock();
+    clockRef.current = setInterval(() => setElapsedMs(Date.now() - startTsRef.current), 200);
+    setVisible(true);
+    setTimeout(() => {
+      if (handsFreeRef.current) recorderRef.current?.start?.();
+    }, 220);
+  }, [stopClock]);
 
   useEffect(() => {
     let cancelled = false;
@@ -469,6 +505,8 @@ export default function Overlay() {
   const scheduleHide = useCallback(
     (delay = 600) => {
       stopClock();
+      handsFreeRef.current = false;
+      setHandsFreeMode(false);
       if (autoHideRef.current) clearTimeout(autoHideRef.current);
       autoHideRef.current = setTimeout(() => {
         setVisible(false);
@@ -484,40 +522,62 @@ export default function Overlay() {
   );
 
   const doInject = useCallback(
-    async (injText) => {
-      await window.vani?.injectOverlayText?.({ text: injText, ...meta });
-      scheduleHide(0);
+    async (injText, extraMeta = {}, autoSend = false) => {
+      await window.vani?.injectOverlayText?.({ text: injText, ...meta, ...extraMeta, autoSend });
+      if (handsFreeRef.current) {
+        startHandsFreeTurn();
+      } else {
+        scheduleHide(0);
+      }
     },
-    [meta, scheduleHide]
+    [meta, scheduleHide, startHandsFreeTurn]
   );
 
   const recorder = useRecorder({
     enabledSilenceDetection: handsFreeMode || hudCfg.autoStopOnSilence,
-    silenceDurationMs: hudCfg.silenceDurationMs,
+    silenceDurationMs: handsFreeMode ? Math.min(hudCfg.silenceDurationMs || 1600, 1600) : hudCfg.silenceDurationMs,
+    waitForSpeech: handsFreeMode,
     onStateChange: (recording) => {
       if (recording) setPhase("recording");
     },
+    onSilentFinish: () => {
+      if (handsFreeRef.current) {
+        startHandsFreeTurn();
+      } else {
+        scheduleHide(0);
+      }
+    },
     onError: (msg) => {
       stopClock();
-      setHandsFreeMode(false);
+      if (handsFreeRef.current) {
+        // Don't drop hands-free on transient silence; only show error on real mic failure
+        if (String(msg || "").toLowerCase().includes("no speech")) {
+          startHandsFreeTurn();
+          return;
+        }
+      }
       setPhase("error");
       setText(msg || "Mic error");
       scheduleHide(2400);
     },
     onRecordingComplete: async (payload) => {
       stopClock();
-      setHandsFreeMode(false);
       setPhase("processing");
       setText("");
       try {
+        const isHandsFree = handsFreeRef.current;
         const arg =
           payload && typeof payload === "object" && ("wavPath" in payload || "wavBuffer" in payload)
-            ? { ...payload, allowActions: true }
-            : { wavBuffer: payload, allowActions: true };
+            ? { ...payload, allowActions: true, handsFree: isHandsFree }
+            : { wavBuffer: payload, allowActions: true, handsFree: isHandsFree };
         const result = await window.vani?.dictationComplete?.(arg);
         if (!result?.ok) {
           if (!result?.error || result.error === "Nothing heard.") {
-            scheduleHide(0);
+            if (handsFreeRef.current) {
+              startHandsFreeTurn();
+            } else {
+              scheduleHide(0);
+            }
           } else {
             setPhase("error");
             setText(result.error);
@@ -526,31 +586,30 @@ export default function Overlay() {
           return;
         }
         if (result.actionExecuted) {
-          if (result.followUpDictation) {
-            // Hands-free "start typing" flow: keep pill open and immediately listen for dictation!
+          if (result.stopHandsFree) {
+            scheduleHide(0);
+          } else if (result.followUpDictation || handsFreeRef.current) {
+            handsFreeRef.current = true;
             setHandsFreeMode(true);
-            setPhase("recording");
-            setElapsedMs(0);
-            startTsRef.current = Date.now();
-            stopClock();
-            clockRef.current = setInterval(() => setElapsedMs(Date.now() - startTsRef.current), 200);
-            setVisible(true);
-            setTimeout(() => recorderRef.current?.start?.(), 180);
+            startHandsFreeTurn();
           } else {
             scheduleHide(0);
           }
           return;
         }
         if (result.command === "delete" || result.command === "undo") {
-          scheduleHide(0);
+          if (handsFreeRef.current) startHandsFreeTurn();
+          else scheduleHide(0);
           return;
         }
-        setMeta({
+        const nextMeta = {
           rawText: result.rawText,
           providerLabel: result.providerLabel,
           privacyMode: result.privacyMode,
-        });
-        await doInject(result.text || "");
+        };
+        setMeta(nextMeta);
+        // In Hands-Free mode, automatically send (press Enter) after pasting directly into the active app!
+        await doInject(result.text || "", nextMeta, handsFreeRef.current);
       } catch (err) {
         setPhase("error");
         setText(err.message || "Failed");
@@ -576,6 +635,8 @@ export default function Overlay() {
         clearTimeout(autoHideRef.current);
         autoHideRef.current = null;
       }
+      handsFreeRef.current = false;
+      setHandsFreeMode(false);
       setPhase("recording");
       setText("");
       setElapsedMs(0);
@@ -586,20 +647,46 @@ export default function Overlay() {
       recorder.start();
     });
     const offStop = window.vani?.onDictationStop?.(() => {
+      if (handsFreeRef.current) return;
       stopClock();
-      // Keep pill visible through "Transcribing..." and "Pasted" states; scheduleHide dismisses it after paste.
       setPhase("processing");
       setVisible(true);
       recorder.stop();
+    });
+    const offHandsFreeStart = window.vani?.onHandsFreeStart?.((payload) => {
+      if (autoHideRef.current) {
+        clearTimeout(autoHideRef.current);
+        autoHideRef.current = null;
+      }
+      handsFreeRef.current = true;
+      setHandsFreeMode(true);
+      setVisible(true);
+      if (!payload?.alreadyRecording) {
+        setPhase("recording");
+        setText("");
+        setElapsedMs(0);
+        startTsRef.current = Date.now();
+        stopClock();
+        clockRef.current = setInterval(() => setElapsedMs(Date.now() - startTsRef.current), 200);
+        recorder.start();
+      }
+    });
+    const offHandsFreeStop = window.vani?.onHandsFreeStop?.(() => {
+      handsFreeRef.current = false;
+      setHandsFreeMode(false);
+      recorder.cancel?.();
+      scheduleHide(0);
     });
     return () => {
       offShown?.();
       offStart?.();
       offStop?.();
+      offHandsFreeStart?.();
+      offHandsFreeStop?.();
       stopClock();
       if (autoHideRef.current) clearTimeout(autoHideRef.current);
     };
-  }, [recorder, stopClock]);
+  }, [recorder, scheduleHide, stopClock]);
 
   const showTop = phase === "recording" || phase === "processing";
   const showBottom = phase === "error";
@@ -631,8 +718,9 @@ export default function Overlay() {
           showTimer={hudCfg.hudShowTimer}
           showMode={hudCfg.hudShowMode}
           glass={hudCfg.hudGlass}
+          handsFree={handsFreeMode}
           onCancel={() => {
-            recorder.stop();
+            recorder.cancel?.();
             scheduleHide(0);
           }}
         />

@@ -36,6 +36,7 @@ function createBrowserPreviewBridge() {
         isWindows: false,
         appleAiSupported: true,
         pushToTalkKey: "⌥ Option",
+        handsFreeKey: "⌥ + ⌘",
         modifierSymbol: "⌘",
         dashboardHotkey: "⌘⇧D",
         dictateHotkey: "⌘⇧Space",
@@ -50,6 +51,7 @@ function createBrowserPreviewBridge() {
         isWindows: true,
         appleAiSupported: false,
         pushToTalkKey: "Right Alt",
+        handsFreeKey: "Right Alt + Ctrl",
         modifierSymbol: "Ctrl+",
         dashboardHotkey: "Ctrl+Shift+D",
         dictateHotkey: "Ctrl+Shift+Space",
@@ -108,6 +110,7 @@ function createBrowserPreviewBridge() {
     hudGlass: true,
     trayIconStyle: "monochrome",
     voiceActionsEnabled: true,
+    handsFreeAutoSend: true,
     appAliases: [
       { spoken: "editor", target: "Antigravity" },
       { spoken: "browser", target: "Google Chrome" },
@@ -233,6 +236,8 @@ function createBrowserPreviewBridge() {
 
     onDictationStart: (cb) => onLocal("dictation-start", cb),
     onDictationStop: (cb) => onLocal("dictation-stop", cb),
+    onHandsFreeStart: (cb) => onLocal("hands-free-start", cb),
+    onHandsFreeStop: (cb) => onLocal("hands-free-stop", cb),
     onOverlayShown: (cb) => onLocal("overlay-shown", cb),
 
     dictationComplete: async () => {
@@ -434,50 +439,79 @@ function createBrowserPreviewBridge() {
             { name: "Windows Terminal", path: "wt.exe" },
           ],
     testVoiceAction: async (phrase, execute = false) => {
-      const lower = (phrase || "").trim().toLowerCase().replace(/[.!?]+$/, "");
+      const stripped = (phrase || "")
+        .trim()
+        .replace(/^(?:(?:um|uh|ah|so|hey|okay|ok|please|can you|could you|hey vani|vani|just)[,\s]+)+/i, "")
+        .trim();
+      const lower = stripped.toLowerCase().replace(/[.!?]+$/, "");
       const previewApps = isMacPreview
-        ? ["Antigravity", "Brave Browser", "ChatGPT", "Discord", "Gemini", "Google Chrome", "Notes", "Notion", "Safari", "Slack", "Terminal", "Visual Studio Code", "WhatsApp"]
-        : ["Antigravity", "Discord", "File Explorer", "Google Chrome", "Microsoft Edge", "Notepad", "Notion", "Slack", "Visual Studio Code", "Windows Terminal"];
+        ? ["Antigravity", "App Store", "Brave Browser", "ChatGPT", "Discord", "Gemini", "Google Chrome", "Music", "Notes", "Notion", "Safari", "Slack", "System Settings", "Terminal", "Visual Studio Code", "WhatsApp"]
+        : ["Antigravity", "Discord", "File Explorer", "Google Chrome", "Microsoft Edge", "Notepad", "Notion", "Settings", "Slack", "Visual Studio Code", "Windows Terminal"];
+      const webApps = {
+        claude: { name: "Claude", path: "https://claude.ai", isWeb: true },
+        claudeai: { name: "Claude", path: "https://claude.ai", isWeb: true },
+        claudea: { name: "Claude", path: "https://claude.ai", isWeb: true },
+        youtube: { name: "YouTube", path: "https://www.youtube.com", isWeb: true },
+        gmail: { name: "Gmail", path: "https://mail.google.com", isWeb: true },
+        github: { name: "GitHub", path: "https://github.com", isWeb: true },
+        applemusic: { name: "Apple Music", path: "https://music.apple.com", isWeb: true },
+      };
+      const builtinMap = {
+        applemusic: "Music",
+        chatgpt: "ChatGPT",
+        chatgbt: "ChatGPT",
+        antigravity: "Antigravity",
+        settings: isMacPreview ? "System Settings" : "Settings",
+        vscode: "Visual Studio Code",
+        chrome: "Google Chrome",
+      };
       const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
       const resolvePreviewApp = (q) => {
         const nq = norm(q);
         if (!nq) return null;
         const aliasHit = (settings.appAliases || []).find((a) => norm(a.spoken) === nq);
-        if (aliasHit) return aliasHit.target;
-        const direct = previewApps.find((a) => norm(a) === nq || norm(a).startsWith(nq));
-        return direct || null;
+        if (aliasHit) return { name: aliasHit.target, path: "", isWeb: false };
+        const canonical = builtinMap[nq];
+        const lookup = canonical ? norm(canonical) : nq;
+        const direct = previewApps.find((a) => norm(a) === lookup || (lookup.length >= 4 && norm(a).startsWith(lookup)));
+        if (direct) return { name: direct, path: "", isWeb: false };
+        if (webApps[nq]) return webApps[nq];
+        return null;
       };
+      if (["stop listening", "stop hands free", "stop hands-free", "exit hands free", "stop vani"].includes(lower)) {
+        return { matched: true, action: { kind: "stopHandsFree" }, executed: execute, result: { ok: true, summary: "Hands-free mode stopped" } };
+      }
       if (["press enter", "hit enter", "send message", "send it"].includes(lower)) {
         return { matched: true, action: { kind: "pressEnter" }, executed: execute, result: { ok: true, summary: "Pressed Enter" } };
       }
       if (["start typing", "start dictating", "focus chat"].includes(lower)) {
-        return { matched: true, action: { kind: "startTyping", text: null, pressEnter: false }, executed: execute, result: { ok: true, summary: "Focused input — start speaking", followUpDictation: true } };
+        return { matched: true, action: { kind: "startTyping", text: null, pressEnter: false }, executed: execute, result: { ok: true, summary: "Hands-free listening active", followUpDictation: true } };
       }
       if (lower.startsWith("start typing ")) {
-        const text = phrase.trim().slice("start typing ".length);
-        return { matched: true, action: { kind: "startTyping", text, pressEnter: false }, executed: execute, result: { ok: true, summary: "Typed into active input" } };
+        const text = stripped.slice("start typing ".length);
+        return { matched: true, action: { kind: "startTyping", text, pressEnter: true }, executed: execute, result: { ok: true, summary: "Typed & sent" } };
       }
-      const mChain = lower.match(/^(?:open|launch|switch to|go to)\s+(.+?)\s+and\s+(?:start typing|type|say|ask|send|message)\s+(.+)$/i);
+      const mChain = lower.match(/^(?:open|launch|switch to|go to)\s+(.+?)\s+and\s+(?:start typing|type|say|ask|send|search|message)\s+(.+)$/i);
       if (mChain) {
-        const appName = resolvePreviewApp(mChain[1]);
-        if (appName) {
+        const app = resolvePreviewApp(mChain[1]);
+        if (app) {
           return {
             matched: true,
-            action: { kind: "openAndType", appName, appPath: "", text: mChain[2], pressEnter: lower.includes(" and send ") || lower.includes(" and ask ") },
+            action: { kind: "openAndType", appName: app.name, appPath: app.path, isWeb: app.isWeb, text: mChain[2], pressEnter: true },
             executed: execute,
-            result: { ok: true, summary: `Opened ${appName} & typed` },
+            result: { ok: true, summary: `Opened ${app.name} & sent` },
           };
         }
       }
       const mOpen = lower.match(/^(?:open|launch|switch to|go to)\s+([a-z0-9\s.-]+)$/i);
       if (mOpen) {
-        const appName = resolvePreviewApp(mOpen[1]);
-        if (appName) {
+        const app = resolvePreviewApp(mOpen[1]);
+        if (app) {
           return {
             matched: true,
-            action: { kind: "openApp", appName, appPath: "" },
+            action: { kind: "openApp", appName: app.name, appPath: app.path, isWeb: app.isWeb },
             executed: execute,
-            result: { ok: true, summary: `Opened ${appName}` },
+            result: { ok: true, summary: app.isWeb ? `Opened ${app.name} in browser` : `Opened ${app.name}` },
           };
         }
       }
@@ -500,23 +534,26 @@ const tauriBridge = {
   // Dictation lifecycle
   onDictationStart: (cb) => subscribe("dictation-start", cb),
   onDictationStop: (cb) => subscribe("dictation-stop", cb),
+  onHandsFreeStart: (cb) => subscribe("hands-free-start", cb),
+  onHandsFreeStop: (cb) => subscribe("hands-free-stop", cb),
   onOverlayShown: (cb) => subscribe("overlay-shown", cb),
   onNativeAudioLevel: (cb) => subscribe("native-audio-level", cb),
   startNativeRecording: () => invoke("start_native_recording"),
   stopNativeRecording: () => invoke("stop_native_recording"),
   cancelNativeRecording: () => invoke("cancel_native_recording"),
-  dictationComplete: ({ wavBuffer, wavPath, allowActions = true }) =>
+  dictationComplete: ({ wavBuffer, wavPath, allowActions = true, handsFree = false }) =>
     invoke("dictation_complete", {
       wavBuffer: wavBuffer ? Array.from(new Uint8Array(wavBuffer)) : null,
       wavPath: wavPath || null,
       allowActions,
+      handsFree,
     }),
   cancelDictation: () => invoke("cancel_dictation"),
 
   // Injection
   injectText: (text) => invoke("inject_text", { text }),
-  injectOverlayText: ({ text, rawText, providerLabel, privacyMode }) =>
-    invoke("inject_overlay_text", { text, rawText, providerLabel, privacyMode }),
+  injectOverlayText: ({ text, rawText, providerLabel, privacyMode, autoSend = false }) =>
+    invoke("inject_overlay_text", { text, rawText, providerLabel, privacyMode, autoSend }),
 
   // Dashboard/window control
   openMainWindow: (section) => invoke("open_main_window", { section }),

@@ -552,7 +552,7 @@ export default function HomeView({
               {result.actionExecuted ? (
                 <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--emerald-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--emerald)]">
                   <Zap className="h-3.5 w-3.5" />
-                  Voice Action Executed: {result.actionSummary || result.actionKind}
+                  Vani Action Executed: {result.actionSummary || result.actionKind}
                 </span>
               ) : (
                 displayResultText || <span className="italic text-[var(--muted)]">No speech detected.</span>

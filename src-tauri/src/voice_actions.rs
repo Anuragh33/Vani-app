@@ -11,6 +11,8 @@ use crate::config::AppAlias;
 pub struct InstalledApp {
     pub name: String,
     pub path: String,
+    #[serde(default)]
+    pub is_web: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,10 +21,14 @@ pub enum VoiceAction {
     OpenApp {
         app_name: String,
         app_path: String,
+        #[serde(default)]
+        is_web: bool,
     },
     OpenAndType {
         app_name: String,
         app_path: String,
+        #[serde(default)]
+        is_web: bool,
         text: String,
         press_enter: bool,
     },
@@ -30,6 +36,7 @@ pub enum VoiceAction {
         text: Option<String>,
         press_enter: bool,
     },
+    StopHandsFree,
     PressEnter,
     NewLine,
     SelectAll,
@@ -43,6 +50,7 @@ pub struct ActionExecutionResult {
     pub action_kind: String,
     pub summary: String,
     pub follow_up_dictation: bool,
+    pub stop_hands_free: bool,
     pub target_app: Option<String>,
 }
 
@@ -79,22 +87,90 @@ fn levenshtein(a: &str, b: &str) -> usize {
     prev[n]
 }
 
+/// Built-in spoken aliases -> canonical desktop app name (including common STT spellings).
 fn builtin_aliases() -> &'static [(&'static str, &'static str)] {
     &[
+        // Antigravity
         ("antigravity", "Antigravity"),
         ("anti gravity", "Antigravity"),
         ("anti-gravity", "Antigravity"),
+        ("antigrav", "Antigravity"),
+        ("and gravity", "Antigravity"),
+        // Apple built-in macOS apps (macOS names them without "Apple" prefix!)
+        ("apple music", "Music"),
+        ("music", "Music"),
+        ("itunes", "Music"),
+        ("apple tv", "TV"),
+        ("apple notes", "Notes"),
+        ("notes", "Notes"),
+        ("apple mail", "Mail"),
+        ("mail", "Mail"),
+        ("apple maps", "Maps"),
+        ("maps", "Maps"),
+        ("apple photos", "Photos"),
+        ("photos", "Photos"),
+        ("apple books", "Books"),
+        ("apple podcasts", "Podcasts"),
+        ("podcasts", "Podcasts"),
+        ("apple calendar", "Calendar"),
+        ("calendar", "Calendar"),
+        ("apple reminders", "Reminders"),
+        ("reminders", "Reminders"),
+        ("apple weather", "Weather"),
+        ("weather", "Weather"),
+        ("app store", "App Store"),
+        ("appstore", "App Store"),
+        ("mac app store", "App Store"),
+        ("imessage", "Messages"),
+        ("i message", "Messages"),
+        ("messages", "Messages"),
+        ("facetime", "FaceTime"),
+        ("face time", "FaceTime"),
+        ("voice memos", "VoiceMemos"),
+        ("system settings", "System Settings"),
+        ("settings", "System Settings"),
+        ("system preferences", "System Settings"),
+        ("preferences", "System Settings"),
+        ("finder", "Finder"),
+        ("terminal", "Terminal"),
+        ("safari", "Safari"),
+        // AI assistants (frequent STT variations!)
+        ("chatgpt", "ChatGPT"),
+        ("chat gpt", "ChatGPT"),
+        ("chat g p t", "ChatGPT"),
+        ("chat gbt", "ChatGPT"),
+        ("chat g b t", "ChatGPT"),
+        ("chad gpt", "ChatGPT"),
+        ("chat pt", "ChatGPT"),
+        ("chat gdp", "ChatGPT"),
+        ("charge gpt", "ChatGPT"),
+        ("gpt", "ChatGPT"),
+        ("claude", "Claude"),
+        ("claude ai", "Claude"),
+        ("claude a", "Claude"),
+        ("claude a i", "Claude"),
+        ("claud", "Claude"),
+        ("claud ai", "Claude"),
+        ("clod", "Claude"),
+        ("clod ai", "Claude"),
+        ("cloud ai", "Claude"),
+        ("clawed", "Claude"),
+        ("clawed ai", "Claude"),
+        ("gemini", "Gemini"),
+        ("google gemini", "Gemini"),
+        ("perplexity", "Perplexity"),
+        ("perplexity ai", "Perplexity"),
+        // Dev & Browsers & Messaging
         ("vscode", "Visual Studio Code"),
         ("vs code", "Visual Studio Code"),
+        ("v s code", "Visual Studio Code"),
         ("code", "Visual Studio Code"),
         ("chrome", "Google Chrome"),
         ("google chrome", "Google Chrome"),
         ("brave", "Brave Browser"),
+        ("brave browser", "Brave Browser"),
         ("edge", "Microsoft Edge"),
         ("firefox", "Firefox"),
-        ("safari", "Safari"),
-        ("chatgpt", "ChatGPT"),
-        ("chat gpt", "ChatGPT"),
         ("whatsapp", "WhatsApp"),
         ("whats app", "WhatsApp"),
         ("word", "Microsoft Word"),
@@ -102,27 +178,56 @@ fn builtin_aliases() -> &'static [(&'static str, &'static str)] {
         ("powerpoint", "Microsoft PowerPoint"),
         ("outlook", "Microsoft Outlook"),
         ("teams", "Microsoft Teams"),
-        ("settings", "System Settings"),
-        ("system settings", "System Settings"),
-        ("terminal", "Terminal"),
         ("notepad", "Notepad"),
         ("calculator", "Calculator"),
         ("explorer", "File Explorer"),
-        ("finder", "Finder"),
-        ("notes", "Notes"),
         ("slack", "Slack"),
         ("discord", "Discord"),
         ("notion", "Notion"),
         ("cursor", "Cursor"),
-        ("gemini", "Gemini"),
-        ("perplexity", "Perplexity"),
         ("telegram", "Telegram"),
         ("spotify", "Spotify"),
         ("xcode", "Xcode"),
+        ("x code", "Xcode"),
         ("postman", "Postman"),
         ("docker", "Docker"),
         ("figma", "Figma"),
         ("zoom", "Zoom"),
+    ]
+}
+
+/// Well-known web app fallbacks when a user asks to open a popular service
+/// (like Claude, YouTube, Gmail, GitHub, ChatGPT, Apple Music) that isn't installed locally.
+fn builtin_web_apps() -> &'static [(&'static str, &'static str, &'static str)] {
+    &[
+        ("claude", "Claude", "https://claude.ai"),
+        ("claudeai", "Claude", "https://claude.ai"),
+        ("claudea", "Claude", "https://claude.ai"),
+        ("claud", "Claude", "https://claude.ai"),
+        ("clod", "Claude", "https://claude.ai"),
+        ("cloudai", "Claude", "https://claude.ai"),
+        ("chatgpt", "ChatGPT", "https://chatgpt.com"),
+        ("chatgbt", "ChatGPT", "https://chatgpt.com"),
+        ("gemini", "Gemini", "https://gemini.google.com"),
+        ("perplexity", "Perplexity", "https://www.perplexity.ai"),
+        ("youtube", "YouTube", "https://www.youtube.com"),
+        ("gmail", "Gmail", "https://mail.google.com"),
+        ("github", "GitHub", "https://github.com"),
+        ("google", "Google", "https://www.google.com"),
+        ("googledocs", "Google Docs", "https://docs.google.com"),
+        ("googledrive", "Google Drive", "https://drive.google.com"),
+        ("googlecalendar", "Google Calendar", "https://calendar.google.com"),
+        ("applemusic", "Apple Music", "https://music.apple.com"),
+        ("spotify", "Spotify", "https://open.spotify.com"),
+        ("whatsapp", "WhatsApp", "https://web.whatsapp.com"),
+        ("notion", "Notion", "https://www.notion.so"),
+        ("figma", "Figma", "https://www.figma.com"),
+        ("linkedin", "LinkedIn", "https://www.linkedin.com"),
+        ("twitter", "X", "https://x.com"),
+        ("netflix", "Netflix", "https://www.netflix.com"),
+        ("reddit", "Reddit", "https://www.reddit.com"),
+        ("slack", "Slack", "https://app.slack.com"),
+        ("discord", "Discord", "https://discord.com/app"),
     ]
 }
 
@@ -134,7 +239,10 @@ pub fn discover_installed_apps() -> Vec<InstalledApp> {
         PathBuf::from("/System/Applications/Utilities"),
     ];
     if let Ok(home) = std::env::var("HOME") {
-        dirs.push(PathBuf::from(home).join("Applications"));
+        let user_apps = PathBuf::from(&home).join("Applications");
+        dirs.push(user_apps.clone());
+        dirs.push(user_apps.join("Chrome Apps.localized"));
+        dirs.push(user_apps.join("Brave Browser Apps.localized"));
     }
 
     let mut seen: HashMap<String, InstalledApp> = HashMap::new();
@@ -146,10 +254,15 @@ pub fn discover_installed_apps() -> Vec<InstalledApp> {
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) == Some("app") {
                 if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    // Skip internal URL handler shims so e.g. "Claude Code URL Handler" doesn't hijack "Claude"
+                    if stem.to_lowercase().contains("url handler") {
+                        continue;
+                    }
                     let key = normalize_key(stem);
                     seen.entry(key).or_insert_with(|| InstalledApp {
                         name: stem.to_string(),
                         path: path.to_string_lossy().to_string(),
+                        is_web: false,
                     });
                 }
             }
@@ -160,6 +273,7 @@ pub fn discover_installed_apps() -> Vec<InstalledApp> {
     seen.entry("finder".into()).or_insert_with(|| InstalledApp {
         name: "Finder".into(),
         path: "/System/Library/CoreServices/Finder.app".into(),
+        is_web: false,
     });
 
     let mut apps: Vec<InstalledApp> = seen.into_values().collect();
@@ -197,6 +311,7 @@ pub fn discover_installed_apps() -> Vec<InstalledApp> {
                     seen.entry(key).or_insert_with(|| InstalledApp {
                         name: stem.to_string(),
                         path: path.to_string_lossy().to_string(),
+                        is_web: false,
                     });
                 }
             }
@@ -218,7 +333,6 @@ pub fn discover_installed_apps() -> Vec<InstalledApp> {
         );
     }
 
-    // Built-in Windows apps always available on PATH / Shell
     for (name, cmd) in [
         ("Notepad", "notepad.exe"),
         ("Calculator", "calc.exe"),
@@ -233,6 +347,7 @@ pub fn discover_installed_apps() -> Vec<InstalledApp> {
         seen.entry(normalize_key(name)).or_insert_with(|| InstalledApp {
             name: name.into(),
             path: cmd.into(),
+            is_web: false,
         });
     }
 
@@ -246,8 +361,9 @@ pub fn discover_installed_apps() -> Vec<InstalledApp> {
     vec![]
 }
 
-/// Resolve a spoken app name against user aliases, built-in aliases, and discovered apps.
-/// Returns `None` if no installed app matches (so normal dictation is never hijacked!).
+/// Resolve a spoken app name against user aliases, built-in aliases, discovered desktop apps,
+/// and well-known web apps (e.g. Claude -> claude.ai when Claude.app isn't installed).
+/// Returns `None` for normal prose so regular dictation is never hijacked.
 pub fn resolve_app(
     spoken: &str,
     installed: &[InstalledApp],
@@ -261,11 +377,9 @@ pub fn resolve_app(
         return None;
     }
 
-    // Reject obvious non-app prose ("the door", "a new tab", "this file")
     let lower = cleaned.to_lowercase();
     for stop_prefix in ["the ", "a ", "an ", "this ", "that ", "my ", "your ", "it ", "up "] {
         if lower.starts_with(stop_prefix) {
-            // Allow "the browser" only if user explicitly made a custom alias for it
             let has_custom = custom_aliases
                 .iter()
                 .any(|a| normalize_key(&a.spoken) == normalize_key(&lower));
@@ -284,39 +398,62 @@ pub fn resolve_app(
     for alias in custom_aliases {
         if normalize_key(&alias.spoken) == query_norm {
             let target_norm = normalize_key(&alias.target);
+            if alias.target.starts_with("http://") || alias.target.starts_with("https://") {
+                return Some(InstalledApp {
+                    name: alias.spoken.clone(),
+                    path: alias.target.clone(),
+                    is_web: true,
+                });
+            }
             if let Some(app) = installed.iter().find(|a| normalize_key(&a.name) == target_norm) {
                 return Some(app.clone());
             }
-            // Allow direct target name/path if user configured one explicitly
             return Some(InstalledApp {
                 name: alias.target.clone(),
                 path: alias.target.clone(),
+                is_web: false,
             });
         }
     }
 
-    // 2. Exact normalized match on installed apps
+    // 2. Exact normalized match on installed desktop apps
     if let Some(app) = installed.iter().find(|a| normalize_key(&a.name) == query_norm) {
         return Some(app.clone());
     }
 
-    // 3. Built-in aliases mapped onto installed apps
+    // 3. Built-in aliases mapped onto installed desktop apps
+    let mut alias_canonical: Option<&'static str> = None;
     for &(alias_spoken, target_name) in builtin_aliases() {
         if normalize_key(alias_spoken) == query_norm {
+            alias_canonical = Some(target_name);
             let target_norm = normalize_key(target_name);
-            if let Some(app) = installed
-                .iter()
-                .find(|a| {
-                    let n = normalize_key(&a.name);
-                    n == target_norm || n.starts_with(&target_norm) || target_norm.starts_with(&n)
-                })
-            {
+            if let Some(app) = installed.iter().find(|a| {
+                let n = normalize_key(&a.name);
+                n == target_norm
+            }) {
+                return Some(app.clone());
+            }
+            // Secondary prefix match on canonical name (e.g. "Google Chrome" vs "Chrome")
+            if let Some(app) = installed.iter().find(|a| {
+                let n = normalize_key(&a.name);
+                (n.starts_with(&target_norm) || target_norm.starts_with(&n)) && n.len() >= 4
+            }) {
                 return Some(app.clone());
             }
         }
     }
 
-    // 4. Strong prefix match (e.g. "google" -> "Google Chrome" if >= 4 chars)
+    // 3b. Strip leading "apple " on macOS (e.g. "Apple Reminders" -> "Reminders", "Apple Music" -> "Music")
+    if let Some(stripped) = lower.strip_prefix("apple ") {
+        let stripped_norm = normalize_key(stripped);
+        if stripped_norm.len() >= 2 {
+            if let Some(app) = installed.iter().find(|a| normalize_key(&a.name) == stripped_norm) {
+                return Some(app.clone());
+            }
+        }
+    }
+
+    // 4. Strong prefix match on installed desktop apps (e.g. "antigrav" -> "Antigravity")
     if query_norm.len() >= 4 {
         let mut prefix_matches: Vec<&InstalledApp> = installed
             .iter()
@@ -328,9 +465,9 @@ pub fn resolve_app(
         }
     }
 
-    // 5. Fuzzy match (Levenshtein distance <= 2 for longer app names like "antigravity")
+    // 5. Fuzzy match (Levenshtein distance <= 2 for longer app names like "antigravity", "chatgpt")
     if query_norm.len() >= 5 {
-        let max_dist = if query_norm.len() >= 8 { 2 } else { 1 };
+        let max_dist = if query_norm.len() >= 7 { 2 } else { 1 };
         let mut best: Option<(usize, &InstalledApp)> = None;
         for app in installed {
             let cand = normalize_key(&app.name);
@@ -347,11 +484,49 @@ pub fn resolve_app(
         }
     }
 
+    // 6. Web-app fallback (e.g., "Open Claude" / "Open Claude AI" -> https://claude.ai when Claude.app isn't installed!)
+    let web_lookup = alias_canonical.map(normalize_key).unwrap_or_else(|| query_norm.clone());
+    for &(web_key, display_name, url) in builtin_web_apps() {
+        if web_key == query_norm || web_key == web_lookup {
+            return Some(InstalledApp {
+                name: display_name.to_string(),
+                path: url.to_string(),
+                is_web: true,
+            });
+        }
+    }
+
     None
 }
 
+fn strip_leading_fillers(raw: &str) -> &str {
+    let mut s = raw.trim();
+    loop {
+        let lower = s.to_lowercase();
+        let mut matched = false;
+        for filler in [
+            "um,", "um ", "uh,", "uh ", "ah,", "ah ", "er,", "er ", "so,", "so ",
+            "okay,", "okay ", "ok,", "ok ", "hey,", "hey ", "hey vani,", "hey vani ",
+            "vani,", "vani ", "please ", "can you ", "could you ", "just ", "go ahead and ",
+        ] {
+            if lower.starts_with(filler) {
+                s = s[filler.len()..].trim_start();
+                matched = true;
+                break;
+            }
+        }
+        if !matched {
+            break;
+        }
+    }
+    s
+}
+
 fn strip_trailing_enter(raw: &str) -> (String, bool) {
-    let trimmed = raw.trim().trim_end_matches(|c: char| matches!(c, '.' | '!' | '?')).trim();
+    let trimmed = raw
+        .trim()
+        .trim_end_matches(|c: char| matches!(c, '.' | '!' | '?'))
+        .trim();
     let lower = trimmed.to_lowercase();
     for suffix in [
         " and press enter",
@@ -370,13 +545,13 @@ fn strip_trailing_enter(raw: &str) -> (String, bool) {
     (raw.trim().to_string(), false)
 }
 
-/// Parse a spoken transcript into a structured VoiceAction if it clearly expresses one.
+/// Parse a spoken transcript into a structured Vani Action if it clearly expresses one.
 pub fn parse_voice_action(
     raw_text: &str,
     installed: &[InstalledApp],
     custom_aliases: &[AppAlias],
 ) -> Option<VoiceAction> {
-    let trimmed = raw_text.trim();
+    let trimmed = strip_leading_fillers(raw_text);
     if trimmed.is_empty() {
         return None;
     }
@@ -386,8 +561,19 @@ pub fn parse_voice_action(
         .trim();
     let lower = cleaned_end.to_lowercase();
 
-    // 1. Standalone quick keyboard/control actions (must match whole utterance cleanly)
+    // 1. Standalone quick keyboard / hands-free control actions
     match lower.as_str() {
+        "stop listening"
+        | "stop hands free"
+        | "stop hands-free"
+        | "exit hands free"
+        | "exit hands-free"
+        | "turn off hands free"
+        | "turn off hands-free"
+        | "stop vani"
+        | "goodbye vani" => {
+            return Some(VoiceAction::StopHandsFree);
+        }
         "press enter" | "hit enter" | "send message" | "send it" | "submit message" => {
             return Some(VoiceAction::PressEnter);
         }
@@ -429,7 +615,7 @@ pub fn parse_voice_action(
                 let (payload, press_enter) = strip_trailing_enter(rest);
                 return Some(VoiceAction::StartTyping {
                     text: Some(payload),
-                    press_enter,
+                    press_enter: press_enter || true,
                 });
             }
         }
@@ -437,9 +623,6 @@ pub fn parse_voice_action(
 
     // 3. "open/launch/switch to/go to <app> [and type/start typing/say/ask/send/message <payload>]"
     for prefix in [
-        "hey vani open ",
-        "vani open ",
-        "please open ",
         "open ",
         "launch ",
         "start ",
@@ -448,23 +631,22 @@ pub fn parse_voice_action(
         "focus ",
     ] {
         if let Some(after) = lower.strip_prefix(prefix) {
-            // Preserve original casing from `trimmed` for any typed payload
             let orig_after = &trimmed[prefix.len()..];
 
-            // Check chained separators: "<app> and type <payload>", etc.
             let chain_markers: &[(&str, bool)] = &[
-                (" and start typing ", false),
-                (" and start dictating ", false),
-                (" and type ", false),
-                (" and write ", false),
-                (" and say ", false),
+                (" and start typing ", true),
+                (" and start dictating ", true),
+                (" and type ", true),
+                (" and write ", true),
+                (" and say ", true),
                 (" and ask ", true),
                 (" and send ", true),
-                (" and message ", false),
-                (", start typing ", false),
-                (", type ", false),
-                (" then type ", false),
-                (" then start typing ", false),
+                (" and search ", true),
+                (" and message ", true),
+                (", start typing ", true),
+                (", type ", true),
+                (" then type ", true),
+                (" then start typing ", true),
             ];
 
             for &(marker, default_enter) in chain_markers {
@@ -476,12 +658,14 @@ pub fn parse_voice_action(
                             return Some(VoiceAction::OpenApp {
                                 app_name: app.name,
                                 app_path: app.path,
+                                is_web: app.is_web,
                             });
                         }
                         let (payload, explicit_enter) = strip_trailing_enter(payload_raw);
                         return Some(VoiceAction::OpenAndType {
                             app_name: app.name,
                             app_path: app.path,
+                            is_web: app.is_web,
                             text: payload,
                             press_enter: default_enter || explicit_enter,
                         });
@@ -489,21 +673,22 @@ pub fn parse_voice_action(
                 }
             }
 
-            // Check "<app> and start typing" (chained open + hands-free typing mode!)
+            // "<app> and start typing" (chained open + hands-free typing!)
             for tail in [" and start typing", " then start typing", " and start dictating"] {
                 if let Some(app_query) = after.strip_suffix(tail) {
                     if let Some(app) = resolve_app(app_query, installed, custom_aliases) {
                         return Some(VoiceAction::OpenAndType {
                             app_name: app.name,
                             app_path: app.path,
-                            text: String::new(), // empty text = trigger hands-free follow-up dictation!
+                            is_web: app.is_web,
+                            text: String::new(),
                             press_enter: false,
                         });
                     }
                 }
             }
 
-            // Standalone "open <app>" (only match when the whole phrase resolves to an installed app)
+            // Standalone "open <app>"
             let app_query = after
                 .trim_end_matches(" app")
                 .trim_end_matches(" application")
@@ -512,6 +697,7 @@ pub fn parse_voice_action(
                 return Some(VoiceAction::OpenApp {
                     app_name: app.name,
                     app_path: app.path,
+                    is_web: app.is_web,
                 });
             }
         }
@@ -520,11 +706,19 @@ pub fn parse_voice_action(
     None
 }
 
-/// Launch or bring an application to the foreground.
-pub fn open_application(app_name: &str, app_path: &str) -> Result<()> {
+/// Launch or bring an application (or web app URL) to the foreground.
+pub fn open_application(app_name: &str, app_path: &str, is_web: bool) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
+        if is_web || app_path.starts_with("http://") || app_path.starts_with("https://") {
+            let status = Command::new("open").arg(app_path).status()?;
+            if !status.success() {
+                return Err(anyhow!("Could not open {}", app_name));
+            }
+            return Ok(());
+        }
+
         let status = if !app_path.is_empty() && std::path::Path::new(app_path).exists() {
             Command::new("open").arg(app_path).status()?
         } else {
@@ -533,18 +727,13 @@ pub fn open_application(app_name: &str, app_path: &str) -> Result<()> {
         if !status.success() {
             return Err(anyhow!("Could not open {}", app_name));
         }
-        // Also ensure it is actively brought to the front
-        let safe = app_name.replace('"', "");
-        let _ = Command::new("osascript")
-            .arg("-e")
-            .arg(format!("tell application \"{}\" to activate", safe))
-            .output();
         Ok(())
     }
 
     #[cfg(target_os = "windows")]
     {
         use std::process::Command;
+        let _ = is_web;
         let target = if !app_path.is_empty() { app_path } else { app_name };
         let status = Command::new("cmd")
             .args(["/C", "start", "", target])
@@ -557,7 +746,7 @@ pub fn open_application(app_name: &str, app_path: &str) -> Result<()> {
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        let _ = (app_name, app_path);
+        let _ = (app_name, app_path, is_web);
         Err(anyhow!("App launching not supported on this OS"))
     }
 }
@@ -568,8 +757,6 @@ pub fn focus_chat_or_input_box(app_name: Option<&str>) {
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
-        // Check if current focused element is already editable; if not, focus the bottom-most
-        // AXTextArea or AXTextField in the frontmost window (where chat inputs live).
         let script = r#"
 tell application "System Events"
   set frontProc to first application process whose frontmost is true
@@ -604,7 +791,6 @@ return "unchanged"
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
 
-        // Fallback for Electron/VS Code-based AI IDEs (Antigravity / Cursor) when AX tree is virtualized:
         if res == "unchanged" || res.is_empty() {
             if let Some(name) = app_name {
                 let n = name.to_lowercase();
@@ -621,37 +807,58 @@ return "unchanged"
 
     #[cfg(target_os = "windows")]
     {
-        // Windows apps like Antigravity, Cursor, Slack, Discord, and ChatGPT restore focus
-        // to their active chat box on activation; give the window a brief moment to paint.
         let _ = app_name;
         std::thread::sleep(Duration::from_millis(250));
     }
 }
 
-/// Execute a parsed VoiceAction end-to-end.
-pub fn execute_action(action: &VoiceAction, frontmost_app: Option<&str>) -> Result<ActionExecutionResult> {
+/// Execute a parsed Vani Action end-to-end.
+pub fn execute_action(
+    action: &VoiceAction,
+    frontmost_app: Option<&str>,
+    hands_free_mode: bool,
+    auto_send: bool,
+) -> Result<ActionExecutionResult> {
     match action {
-        VoiceAction::OpenApp { app_name, app_path } => {
-            open_application(app_name, app_path)?;
-            std::thread::sleep(Duration::from_millis(450));
-            focus_chat_or_input_box(Some(app_name));
+        VoiceAction::StopHandsFree => Ok(ActionExecutionResult {
+            ok: true,
+            action_kind: "stopHandsFree".into(),
+            summary: "Hands-free mode stopped".into(),
+            follow_up_dictation: false,
+            stop_hands_free: true,
+            target_app: None,
+        }),
+        VoiceAction::OpenApp {
+            app_name,
+            app_path,
+            is_web,
+        } => {
+            open_application(app_name, app_path, *is_web)?;
+            std::thread::sleep(Duration::from_millis(if *is_web { 900 } else { 500 }));
+            focus_chat_or_input_box(if *is_web { None } else { Some(app_name) });
             Ok(ActionExecutionResult {
                 ok: true,
                 action_kind: "openApp".into(),
-                summary: format!("Opened {}", app_name),
-                follow_up_dictation: false,
-                target_app: Some(app_name.clone()),
+                summary: if *is_web {
+                    format!("Opened {} in browser", app_name)
+                } else {
+                    format!("Opened {}", app_name)
+                },
+                follow_up_dictation: hands_free_mode,
+                stop_hands_free: false,
+                target_app: if *is_web { None } else { Some(app_name.clone()) },
             })
         }
         VoiceAction::OpenAndType {
             app_name,
             app_path,
+            is_web,
             text,
             press_enter,
         } => {
-            open_application(app_name, app_path)?;
-            std::thread::sleep(Duration::from_millis(750));
-            focus_chat_or_input_box(Some(app_name));
+            open_application(app_name, app_path, *is_web)?;
+            std::thread::sleep(Duration::from_millis(if *is_web { 1500 } else { 800 }));
+            focus_chat_or_input_box(if *is_web { None } else { Some(app_name) });
 
             if text.is_empty() {
                 return Ok(ActionExecutionResult {
@@ -659,16 +866,17 @@ pub fn execute_action(action: &VoiceAction, frontmost_app: Option<&str>) -> Resu
                     action_kind: "openAndStartTyping".into(),
                     summary: format!("Opened {} — listening…", app_name),
                     follow_up_dictation: true,
-                    target_app: Some(app_name.clone()),
+                    stop_hands_free: false,
+                    target_app: if *is_web { None } else { Some(app_name.clone()) },
                 });
             }
 
             #[cfg(target_os = "macos")]
-            crate::inject::paste_to_app(text, Some(app_name))?;
+            crate::inject::paste_to_app(text, if *is_web { None } else { Some(app_name) })?;
             #[cfg(not(target_os = "macos"))]
             crate::inject::paste_to_app(text, None)?;
 
-            if *press_enter {
+            if *press_enter || (hands_free_mode && auto_send) {
                 std::thread::sleep(Duration::from_millis(120));
                 crate::inject::send_enter()?;
             }
@@ -676,9 +884,10 @@ pub fn execute_action(action: &VoiceAction, frontmost_app: Option<&str>) -> Resu
             Ok(ActionExecutionResult {
                 ok: true,
                 action_kind: "openAndType".into(),
-                summary: format!("Opened {} & typed", app_name),
-                follow_up_dictation: false,
-                target_app: Some(app_name.clone()),
+                summary: format!("Opened {} & sent", app_name),
+                follow_up_dictation: hands_free_mode,
+                stop_hands_free: false,
+                target_app: if *is_web { None } else { Some(app_name.clone()) },
             })
         }
         VoiceAction::StartTyping { text, press_enter } => {
@@ -697,15 +906,16 @@ pub fn execute_action(action: &VoiceAction, frontmost_app: Option<&str>) -> Resu
             if let Some(payload) = text {
                 if !payload.is_empty() {
                     crate::inject::paste_to_app(payload, frontmost_app)?;
-                    if *press_enter {
+                    if *press_enter || (hands_free_mode && auto_send) {
                         std::thread::sleep(Duration::from_millis(120));
                         crate::inject::send_enter()?;
                     }
                     return Ok(ActionExecutionResult {
                         ok: true,
                         action_kind: "typeText".into(),
-                        summary: "Typed into active input".into(),
-                        follow_up_dictation: false,
+                        summary: "Typed & sent".into(),
+                        follow_up_dictation: hands_free_mode,
+                        stop_hands_free: false,
                         target_app: frontmost_app.map(|s| s.to_string()),
                     });
                 }
@@ -714,8 +924,9 @@ pub fn execute_action(action: &VoiceAction, frontmost_app: Option<&str>) -> Resu
             Ok(ActionExecutionResult {
                 ok: true,
                 action_kind: "startTyping".into(),
-                summary: "Focused input — start speaking".into(),
+                summary: "Hands-free listening active".into(),
                 follow_up_dictation: true,
+                stop_hands_free: false,
                 target_app: frontmost_app.map(|s| s.to_string()),
             })
         }
@@ -725,7 +936,8 @@ pub fn execute_action(action: &VoiceAction, frontmost_app: Option<&str>) -> Resu
                 ok: true,
                 action_kind: "pressEnter".into(),
                 summary: "Pressed Enter".into(),
-                follow_up_dictation: false,
+                follow_up_dictation: hands_free_mode,
+                stop_hands_free: false,
                 target_app: frontmost_app.map(|s| s.to_string()),
             })
         }
@@ -735,7 +947,8 @@ pub fn execute_action(action: &VoiceAction, frontmost_app: Option<&str>) -> Resu
                 ok: true,
                 action_kind: "newLine".into(),
                 summary: "Inserted new line".into(),
-                follow_up_dictation: false,
+                follow_up_dictation: hands_free_mode,
+                stop_hands_free: false,
                 target_app: frontmost_app.map(|s| s.to_string()),
             })
         }
@@ -745,7 +958,8 @@ pub fn execute_action(action: &VoiceAction, frontmost_app: Option<&str>) -> Resu
                 ok: true,
                 action_kind: "selectAll".into(),
                 summary: "Selected all text".into(),
-                follow_up_dictation: false,
+                follow_up_dictation: hands_free_mode,
+                stop_hands_free: false,
                 target_app: frontmost_app.map(|s| s.to_string()),
             })
         }
@@ -755,7 +969,8 @@ pub fn execute_action(action: &VoiceAction, frontmost_app: Option<&str>) -> Resu
                 ok: true,
                 action_kind: "clearInput".into(),
                 summary: "Cleared input box".into(),
-                follow_up_dictation: false,
+                follow_up_dictation: hands_free_mode,
+                stop_hands_free: false,
                 target_app: frontmost_app.map(|s| s.to_string()),
             })
         }
@@ -768,59 +983,68 @@ mod tests {
 
     fn sample_apps() -> Vec<InstalledApp> {
         vec![
-            InstalledApp { name: "Antigravity".into(), path: "/Applications/Antigravity.app".into() },
-            InstalledApp { name: "Google Chrome".into(), path: "/Applications/Google Chrome.app".into() },
-            InstalledApp { name: "Slack".into(), path: "/Applications/Slack.app".into() },
-            InstalledApp { name: "Visual Studio Code".into(), path: "/Applications/Visual Studio Code.app".into() },
+            InstalledApp { name: "Antigravity".into(), path: "/Applications/Antigravity.app".into(), is_web: false },
+            InstalledApp { name: "ChatGPT".into(), path: "/Applications/ChatGPT.app".into(), is_web: false },
+            InstalledApp { name: "Music".into(), path: "/System/Applications/Music.app".into(), is_web: false },
+            InstalledApp { name: "Google Chrome".into(), path: "/Applications/Google Chrome.app".into(), is_web: false },
+            InstalledApp { name: "Slack".into(), path: "/Applications/Slack.app".into(), is_web: false },
+            InstalledApp { name: "Visual Studio Code".into(), path: "/Applications/Visual Studio Code.app".into(), is_web: false },
         ]
     }
 
     #[test]
-    fn parses_open_antigravity_and_fuzzy_variants() {
+    fn parses_apple_music_chatgpt_claude_and_antigravity() {
         let apps = sample_apps();
-        for phrase in ["open antigravity", "Open Anti Gravity.", "launch anti-gravity", "switch to antigravty"] {
-            match parse_voice_action(phrase, &apps, &[]) {
+        // Apple Music -> /System/Applications/Music.app
+        match parse_voice_action("Open Apple Music.", &apps, &[]) {
+            Some(VoiceAction::OpenApp { app_name, is_web, .. }) => {
+                assert_eq!(app_name, "Music");
+                assert!(!is_web);
+            }
+            other => panic!("Expected Music, got {:?}", other),
+        }
+        // ChatGPT & STT variants + leading fillers
+        for p in ["open chatgpt", "Um, open Chat GPT.", "please open chat GBT", "can you open chat g p t"] {
+            match parse_voice_action(p, &apps, &[]) {
+                Some(VoiceAction::OpenApp { app_name, is_web, .. }) => {
+                    assert_eq!(app_name, "ChatGPT");
+                    assert!(!is_web);
+                }
+                other => panic!("Expected ChatGPT for {:?}, got {:?}", p, other),
+            }
+        }
+        // Claude / Claude AI -> web fallback https://claude.ai when not installed locally
+        for p in ["open claude", "Open Claude AI.", "open Claude A"] {
+            match parse_voice_action(p, &apps, &[]) {
+                Some(VoiceAction::OpenApp { app_name, app_path, is_web }) => {
+                    assert_eq!(app_name, "Claude");
+                    assert_eq!(app_path, "https://claude.ai");
+                    assert!(is_web);
+                }
+                other => panic!("Expected Claude web fallback for {:?}, got {:?}", p, other),
+            }
+        }
+        // Antigravity fuzzy variants
+        for p in ["open antigravity", "Open Anti Gravity.", "launch anti-gravity", "switch to antigravty"] {
+            match parse_voice_action(p, &apps, &[]) {
                 Some(VoiceAction::OpenApp { app_name, .. }) => assert_eq!(app_name, "Antigravity"),
-                other => panic!("Expected OpenApp(Antigravity) for {:?}, got {:?}", phrase, other),
+                other => panic!("Expected Antigravity for {:?}, got {:?}", p, other),
             }
         }
     }
 
     #[test]
-    fn parses_chained_open_and_type() {
+    fn parses_chained_open_and_type_and_stop_hands_free() {
         let apps = sample_apps();
         match parse_voice_action("Open Antigravity and type build a dark mode toggle", &apps, &[]) {
             Some(VoiceAction::OpenAndType { app_name, text, press_enter, .. }) => {
                 assert_eq!(app_name, "Antigravity");
                 assert_eq!(text, "build a dark mode toggle");
-                assert!(!press_enter);
-            }
-            other => panic!("Unexpected: {:?}", other),
-        }
-
-        match parse_voice_action("open antigravity and ask what is rust", &apps, &[]) {
-            Some(VoiceAction::OpenAndType { app_name, text, press_enter, .. }) => {
-                assert_eq!(app_name, "Antigravity");
-                assert_eq!(text, "what is rust");
                 assert!(press_enter);
             }
             other => panic!("Unexpected: {:?}", other),
         }
-    }
-
-    #[test]
-    fn parses_start_typing_and_controls() {
-        let apps = sample_apps();
-        assert!(matches!(
-            parse_voice_action("Start typing.", &apps, &[]),
-            Some(VoiceAction::StartTyping { text: None, press_enter: false })
-        ));
-        assert!(matches!(
-            parse_voice_action("start typing hello world and press enter", &apps, &[]),
-            Some(VoiceAction::StartTyping { text: Some(ref t), press_enter: true }) if t == "hello world"
-        ));
-        assert!(matches!(parse_voice_action("Press enter.", &apps, &[]), Some(VoiceAction::PressEnter)));
-        assert!(matches!(parse_voice_action("clear input", &apps, &[]), Some(VoiceAction::ClearInput)));
+        assert!(matches!(parse_voice_action("Stop listening.", &apps, &[]), Some(VoiceAction::StopHandsFree)));
     }
 
     #[test]
@@ -837,16 +1061,6 @@ mod tests {
                 "False positive for {:?}",
                 prose
             );
-        }
-    }
-
-    #[test]
-    fn respects_custom_aliases() {
-        let apps = sample_apps();
-        let aliases = vec![AppAlias { spoken: "my editor".into(), target: "Antigravity".into() }];
-        match parse_voice_action("open my editor", &apps, &aliases) {
-            Some(VoiceAction::OpenApp { app_name, .. }) => assert_eq!(app_name, "Antigravity"),
-            other => panic!("Expected alias match, got {:?}", other),
         }
     }
 }

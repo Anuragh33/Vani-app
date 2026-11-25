@@ -175,6 +175,7 @@ fn setup_hotkeys(app: &mut App) -> tauri::Result<()> {
 #[tauri::command]
 async fn cancel_dictation(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     *state.dictation_active.lock().map_err(|e| e.to_string())? = false;
+    *state.hands_free_active.lock().map_err(|e| e.to_string())? = false;
     let tray_style = state
         .store
         .lock()
@@ -217,6 +218,7 @@ pub fn run() {
                 active_downloads: Arc::new(Mutex::new(HashMap::new())),
                 app_data_dir,
                 dictation_active: Arc::new(Mutex::new(false)),
+                hands_free_active: Arc::new(Mutex::new(false)),
                 frontmost_app: Arc::new(Mutex::new(None)),
                 native_recording: Arc::new(Mutex::new(None)),
             };

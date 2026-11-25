@@ -12,43 +12,43 @@ import {
   ArrowRight,
   CheckCircle2,
   Sparkles,
+  Globe,
 } from "lucide-react";
 import { ToggleSwitch } from "./VaniLogo";
 
 const EXAMPLE_PHRASES = [
   { label: "Open Antigravity", phrase: "Open Antigravity" },
-  { label: "Open + Type", phrase: "Open Antigravity and type build a responsive navbar" },
-  { label: "Open + Ask + Enter", phrase: "Open Antigravity and ask explain async rust" },
-  { label: "Hands-Free Typing", phrase: "Start typing" },
-  { label: "Submit Message", phrase: "Press enter" },
-  { label: "Clear Input", phrase: "Clear input" },
+  { label: "Open Apple Music", phrase: "Open Apple Music" },
+  { label: "Open ChatGPT", phrase: "Open ChatGPT" },
+  { label: "Open Claude", phrase: "Open Claude" },
+  { label: "Open + Ask", phrase: "Open Antigravity and type build a responsive navbar" },
+  { label: "Stop Listening", phrase: "Stop listening" },
 ];
 
 const COMMAND_REFERENCE = [
   {
-    category: "Open & Switch Apps",
-    examples: ["Open Antigravity", "Launch Slack", "Switch to Chrome", "Go to Notes"],
-    desc: "Launches or brings any installed app to the foreground and focuses its primary input.",
+    category: "Open Any Desktop or Web App",
+    examples: ["Open Antigravity", "Open Apple Music", "Open ChatGPT", "Open Claude"],
+    desc: "Launches installed apps natively — and automatically opens popular web apps (Claude, YouTube, Gmail, GitHub) in your browser if no desktop app is installed.",
   },
   {
-    category: "Chained Open + Type",
+    category: "True Hands-Free Mode",
+    examples: ["Press ⌥ + ⌘ (Mac)", "Press Right Alt + Ctrl (Win)", "Stop listening"],
+    desc: "Tap once to stay continuously listening without holding any key. Speak commands or prompts naturally — Vani pastes and sends automatically.",
+  },
+  {
+    category: "Chained Open + Type & Send",
     examples: [
-      "Open Antigravity and type <text>",
-      "Open Antigravity and ask <question>",
-      "Open Slack and message <text>",
-      "Open Antigravity and start typing",
+      "Open Antigravity and type <prompt>",
+      "Open ChatGPT and ask <question>",
+      "Open Chrome and search <topic>",
     ],
-    desc: "Opens the app, focuses the chat/text box, and pastes your polished message (or starts hands-free listening).",
-  },
-  {
-    category: "Hands-Free Chat Typing",
-    examples: ["Start typing", "Start typing <text>", "Focus chat box", "Press enter / Send it"],
-    desc: "Focuses the active app’s chat box and starts hands-free dictation — speak naturally and pause to paste.",
+    desc: "Opens the app, focuses its chat or input box, cleans your speech, and sends it straight away without touching Enter.",
   },
   {
     category: "Quick Input Controls",
-    examples: ["Press enter", "New line", "Select all", "Clear input"],
-    desc: "Control message submission and editing without touching the keyboard.",
+    examples: ["Start typing", "New line", "Select all", "Clear input"],
+    desc: "Control chat input focus and editing completely hands-free across any app.",
   },
 ];
 
@@ -56,28 +56,32 @@ function describeParsedAction(parsed) {
   if (!parsed || !parsed.matched || !parsed.action) return null;
   const a = parsed.action;
   switch (a.kind) {
+    case "stopHandsFree":
+      return { badge: "Stop Hands-Free", steps: ["Exit Hands-Free listening mode & hide HUD"] };
     case "openApp":
       return {
-        badge: "Open App",
-        steps: [`Launch / activate ${a.appName}`, "Focus primary chat or text input"],
+        badge: a.isWeb ? "Open Web App" : "Open App",
+        steps: [
+          a.isWeb ? `Open ${a.appName} (${a.appPath}) in browser` : `Launch / activate ${a.appName}`,
+          "Focus primary chat or text input",
+        ],
       };
     case "openAndType":
       return {
-        badge: a.text ? "Open & Type" : "Open & Hands-Free Dictate",
+        badge: a.text ? "Open, Type & Auto-Send" : "Open & Hands-Free Listen",
         steps: [
-          `Launch / activate ${a.appName}`,
+          a.isWeb ? `Open ${a.appName} in browser` : `Launch / activate ${a.appName}`,
           "Focus chat / text input",
           a.text ? `Paste: “${a.text}”` : "Start hands-free listening automatically",
-          ...(a.pressEnter ? ["Press Enter to submit"] : []),
+          ...(a.text && a.pressEnter ? ["Auto-send (press Enter)"] : []),
         ],
       };
     case "startTyping":
       return {
-        badge: a.text ? "Focus & Type" : "Hands-Free Typing Mode",
+        badge: a.text ? "Focus, Type & Send" : "Hands-Free Listening",
         steps: [
           "Focus active app’s chat / text box",
-          a.text ? `Paste: “${a.text}”` : "Start hands-free listening (auto-stops on pause)",
-          ...(a.pressEnter ? ["Press Enter to submit"] : []),
+          a.text ? `Paste & send: “${a.text}”` : "Stay listening hands-free (auto-sends when you pause)",
         ],
       };
     case "pressEnter":
@@ -89,13 +93,14 @@ function describeParsedAction(parsed) {
     case "clearInput":
       return { badge: "Clear Input", steps: ["Select all + Delete in focused input"] };
     default:
-      return { badge: a.kind, steps: ["Execute voice action"] };
+      return { badge: a.kind, steps: ["Execute Vani Action"] };
   }
 }
 
 export default function VoiceActionsView({ settings, systemInfo, onSaveSettings, onNotify }) {
   const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
   const pushToTalkKey = systemInfo?.pushToTalkKey || (isMac ? "⌥ Option" : "Right Alt");
+  const handsFreeKey = systemInfo?.handsFreeKey || (isMac ? "⌥ + ⌘" : "Right Alt + Ctrl");
 
   const [apps, setApps] = useState([]);
   const [appSearch, setAppSearch] = useState("");
@@ -106,6 +111,7 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
   const [targetAlias, setTargetAlias] = useState("");
 
   const enabled = settings.voiceActionsEnabled !== false;
+  const autoSend = settings.handsFreeAutoSend !== false;
   const aliases = settings.appAliases || [];
 
   useEffect(() => {
@@ -155,7 +161,7 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
       if (res?.executed && res?.result?.summary) {
         onNotify?.(res.result.summary);
       } else if (!res?.matched) {
-        onNotify?.("Phrase did not match a voice action — it will dictate normally.", "error");
+        onNotify?.("Phrase did not match a Vani Action — it will dictate normally.", "error");
       }
     } catch (e) {
       onNotify?.(e?.message || "Failed to execute action", "error");
@@ -172,7 +178,7 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
     onSaveSettings({ appAliases: [...filtered, { spoken, target }] });
     setSpokenAlias("");
     setTargetAlias("");
-    onNotify?.(`Added voice alias “${spoken}” → ${target}`);
+    onNotify?.(`Added Vani alias “${spoken}” → ${target}`);
   };
 
   const removeAlias = (idx) => {
@@ -184,37 +190,73 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Hands-Free Voice Actions</h1>
-            <span className="rounded-full bg-[var(--brand-soft)] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--brand)]">
-              Phase 2
-            </span>
-          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Hands-Free Vani Actions</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Hold <kbd className="vani-kbd">{pushToTalkKey}</kbd> and say{" "}
-            <strong className="text-[var(--text)]">“Open Antigravity”</strong>,{" "}
-            <strong className="text-[var(--text)]">“Start typing”</strong>, or{" "}
-            <strong className="text-[var(--text)]">“Open Antigravity and type …”</strong> to control apps completely hands-free.
+            <em>Vani</em> (Sanskrit for <strong>Voice</strong>) lets you open apps and send messages without touching your keyboard.
+            Hold <kbd className="vani-kbd">{pushToTalkKey}</kbd> for quick commands, or press{" "}
+            <kbd className="vani-kbd">{handsFreeKey}</kbd> together for continuous Hands-Free mode with instant auto-send.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-2.5">
-          <div>
-            <p className="text-xs font-semibold text-[var(--text)]">Voice Actions</p>
-            <p className="text-[11px] text-[var(--muted)]">{enabled ? "Active on push-to-talk" : "Paused"}</p>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3.5 py-2.5">
+            <div>
+              <p className="text-xs font-semibold text-[var(--text)]">Vani Actions</p>
+              <p className="text-[11px] text-[var(--muted)]">{enabled ? "Active" : "Paused"}</p>
+            </div>
+            <ToggleSwitch
+              checked={enabled}
+              onChange={(val) => {
+                onSaveSettings({ voiceActionsEnabled: val });
+                onNotify?.(val ? "Hands-Free Vani Actions enabled" : "Hands-Free Vani Actions paused");
+              }}
+              label="Enable Vani Actions"
+            />
           </div>
-          <ToggleSwitch
-            checked={enabled}
-            onChange={(val) => {
-              onSaveSettings({ voiceActionsEnabled: val });
-              onNotify?.(val ? "Hands-Free Voice Actions enabled" : "Hands-Free Voice Actions paused");
-            }}
-            label="Enable Voice Actions"
-          />
+
+          <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3.5 py-2.5">
+            <div>
+              <p className="text-xs font-semibold text-[var(--text)]">Hands-Free Auto-Send</p>
+              <p className="text-[11px] text-[var(--muted)]">{autoSend ? "Sends without Enter" : "Paste only"}</p>
+            </div>
+            <ToggleSwitch
+              checked={autoSend}
+              onChange={(val) => {
+                onSaveSettings({ handsFreeAutoSend: val });
+                onNotify?.(val ? "Hands-Free messages will auto-send directly" : "Hands-Free will paste without pressing Enter");
+              }}
+              label="Hands-Free Auto-Send"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Interactive Voice Action Simulator & Live Runner */}
+      {/* Mode Cards: Push-to-Talk vs True Hands-Free */}
+      <div className="grid gap-3.5 md:grid-cols-2">
+        <div className="vani-card flex items-start justify-between gap-4 p-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand)]">Push-to-Talk</p>
+            <p className="mt-1 text-sm font-semibold text-[var(--text)]">Hold {pushToTalkKey} → Speak → Release</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Great for quick app launches (“Open Apple Music”, “Open ChatGPT”) or dictating paragraphs at your cursor.
+            </p>
+          </div>
+          <kbd className="vani-kbd shrink-0 font-mono text-xs">{pushToTalkKey}</kbd>
+        </div>
+
+        <div className="vani-card flex items-start justify-between gap-4 border-emerald-500/30 p-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--emerald)]">Completely Hands-Free</p>
+            <p className="mt-1 text-sm font-semibold text-[var(--text)]">Tap {handsFreeKey} Once → Speak Naturally</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Zero keys held. Opens apps, pastes your words directly into Antigravity, Chrome, Safari, or ChatGPT, and sends automatically without pressing Enter. Say “Stop listening” or tap {handsFreeKey} to exit.
+            </p>
+          </div>
+          <kbd className="vani-kbd shrink-0 font-mono text-xs text-[var(--emerald)]">{handsFreeKey}</kbd>
+        </div>
+      </div>
+
+      {/* Interactive Vani Action Simulator & Live Runner */}
       <div className="vani-card p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -224,7 +266,7 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
             <div>
               <h2 className="text-sm font-semibold text-[var(--text)]">Live Intent Parser &amp; Action Tester</h2>
               <p className="text-xs text-[var(--muted)]">
-                Test any spoken phrase to see if VANI runs a hands-free action or dictates normal text.
+                Test any spoken phrase to verify how Vani resolves desktop apps, web apps, and hands-free commands.
               </p>
             </div>
           </div>
@@ -262,7 +304,7 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
             type="text"
             value={phrase}
             onChange={(e) => setPhrase(e.target.value)}
-            placeholder="Try: Open Antigravity and type write unit tests for auth"
+            placeholder="Try: Open Apple Music, Open ChatGPT, Open Claude, or Open Antigravity and type …"
             className="vani-input pl-9 text-sm"
           />
         </div>
@@ -278,7 +320,11 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
           {preview ? (
             <div className="space-y-2.5">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-[var(--emerald)]" />
+                {parsed?.action?.isWeb ? (
+                  <Globe className="h-4 w-4 text-[var(--violet)]" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4 text-[var(--emerald)]" />
+                )}
                 <span className="rounded-full bg-[var(--emerald-soft)] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--emerald)]">
                   Matched · {preview.badge}
                 </span>
@@ -298,13 +344,13 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
             </div>
           ) : (
             <p className="text-xs text-[var(--muted)]">
-              No voice action matched — VANI will treat this as normal dictation and paste it at your cursor (zero false triggers!).
+              No Vani Action matched — VANI will treat this as normal dictation (zero false triggers!).
             </p>
           )}
         </div>
       </div>
 
-      {/* Bottom Grid: Custom App Aliases + Installed Apps + Cheat Sheet */}
+      {/* Bottom Grid: Custom App Aliases + Installed Apps */}
       <div className="grid gap-5 lg:grid-cols-12">
         {/* Custom App Aliases */}
         <div className="vani-card p-5 lg:col-span-6 flex flex-col gap-4">
@@ -314,8 +360,8 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
                 <Keyboard className="h-4 w-4" />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-[var(--text)]">Custom App Aliases</h2>
-                <p className="text-xs text-[var(--muted)]">Map nicknames like “editor” or “chat” to any app</p>
+                <h2 className="text-sm font-semibold text-[var(--text)]">Custom App &amp; URL Aliases</h2>
+                <p className="text-xs text-[var(--muted)]">Map any spoken word to a desktop app or https:// URL</p>
               </div>
             </div>
             <span className="rounded-full bg-[var(--bg-elevated)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--muted)]">
@@ -339,7 +385,7 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
               onKeyDown={(e) => {
                 if (e.key === "Enter") addAlias();
               }}
-              placeholder="Target app (e.g. Antigravity)"
+              placeholder="App name or https:// URL…"
               className="vani-input text-xs"
             />
             <datalist id="vani-installed-apps-datalist">
@@ -360,7 +406,7 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
           <div className="space-y-2 max-h-[210px] overflow-y-auto pr-1">
             {aliases.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[var(--border)] py-6 text-center text-xs text-[var(--muted)]">
-                No custom aliases yet. Built-in aliases (Antigravity, VS Code, Chrome, ChatGPT, Slack…) already work automatically.
+                Built-in aliases (Antigravity, Apple Music, ChatGPT, Claude, VS Code, Chrome, Slack…) already work automatically.
               </div>
             ) : (
               aliases.map((a, idx) => (
@@ -397,7 +443,7 @@ export default function VoiceActionsView({ settings, systemInfo, onSaveSettings,
               <div>
                 <h2 className="text-sm font-semibold text-[var(--text)]">Discovered Apps ({apps.length})</h2>
                 <p className="text-xs text-[var(--muted)]">
-                  Click any app to test opening it by voice
+                  Click any app to test opening it via Vani Actions
                 </p>
               </div>
             </div>

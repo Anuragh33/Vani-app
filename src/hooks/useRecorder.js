@@ -86,9 +86,11 @@ function canUseNativeRecorder() {
 function useRecorder({
   enabledSilenceDetection = true,
   silenceDurationMs = 2000,
+  waitForSpeech = false,
   onRecordingComplete,
   onStateChange,
   onError,
+  onSilentFinish,
 }) {
   const streamRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -101,6 +103,7 @@ function useRecorder({
   const sampleRateRef = useRef(0);
   const rafRef = useRef(0);
   const silenceStartedAtRef = useRef(null);
+  const heardSpeechRef = useRef(false);
   const isRecordingRef = useRef(false);
   const stopRequestedRef = useRef(false);
   const usingNativeRef = useRef(false);
@@ -172,6 +175,10 @@ function useRecorder({
         return;
       }
       if (!res.samples || res.samples < 800 || (typeof res.peak === "number" && res.peak < 0.0004)) {
+        if (onSilentFinish) {
+          onSilentFinish();
+          return;
+        }
         const osHint =
           window.vani?.platform === "darwin"
             ? "macOS Privacy & Security → Microphone"
@@ -183,7 +190,20 @@ function useRecorder({
     } catch (err) {
       onError?.(err?.message || "Failed to finalize recording.");
     }
-  }, [onError, onRecordingComplete, onStateChange, teardownNative]);
+  }, [onError, onRecordingComplete, onSilentFinish, onStateChange, teardownNative]);
+
+  const cancel = useCallback(() => {
+    isRecordingRef.current = false;
+    stopRequestedRef.current = false;
+    setIsRecording(false);
+    onStateChange?.(false);
+    teardownWeb();
+    teardownNative();
+    if (usingNativeRef.current) {
+      usingNativeRef.current = false;
+      window.vani?.cancelNativeRecording?.();
+    }
+  }, [onStateChange, teardownNative, teardownWeb]);
 
   const stop = useCallback(() => {
     if (!isRecordingRef.current || stopRequestedRef.current) return;
@@ -199,6 +219,7 @@ function useRecorder({
     if (isRecordingRef.current) return;
     stopRequestedRef.current = false;
     silenceStartedAtRef.current = null;
+    heardSpeechRef.current = false;
 
     // Prefer native Rust/OS audio recorder (AVAudioEngine on macOS, WASAPI on Windows) inside Tauri
     if (canUseNativeRecorder()) {
@@ -208,7 +229,11 @@ function useRecorder({
           const clamped = Math.max(0.06, Math.min(1, Number(lvl) || 0.06));
           setLevels((prev) => [...prev.slice(1), clamped]);
 
-          if (enabledSilenceDetection) {
+          if (clamped >= 0.115) {
+            heardSpeechRef.current = true;
+          }
+
+          if (enabledSilenceDetection && (!waitForSpeech || heardSpeechRef.current)) {
             if (clamped < 0.085) {
               if (!silenceStartedAtRef.current) silenceStartedAtRef.current = Date.now();
               if (Date.now() - silenceStartedAtRef.current >= silenceDurationMs) {
@@ -284,14 +309,17 @@ function useRecorder({
 
         if (enabledSilenceDetection) {
           const mag = averageMagnitude(timeData);
-          if (mag < 0.012) {
-            if (!silenceStartedAtRef.current) silenceStartedAtRef.current = Date.now();
-            if (Date.now() - silenceStartedAtRef.current >= silenceDurationMs) {
-              stop();
-              return;
+          if (mag >= 0.018) heardSpeechRef.current = true;
+          if (!waitForSpeech || heardSpeechRef.current) {
+            if (mag < 0.012) {
+              if (!silenceStartedAtRef.current) silenceStartedAtRef.current = Date.now();
+              if (Date.now() - silenceStartedAtRef.current >= silenceDurationMs) {
+                stop();
+                return;
+              }
+            } else {
+              silenceStartedAtRef.current = null;
             }
-          } else {
-            silenceStartedAtRef.current = null;
           }
         }
         rafRef.current = window.requestAnimationFrame(tick);
@@ -305,7 +333,7 @@ function useRecorder({
       onError?.(error.message || "Unable to access the microphone.");
       teardownWeb();
     }
-  }, [enabledSilenceDetection, onError, onStateChange, silenceDurationMs, stop, teardownNative, teardownWeb]);
+  }, [enabledSilenceDetection, onError, onStateChange, silenceDurationMs, stop, teardownNative, teardownWeb, waitForSpeech]);
 
   useEffect(
     () => () => {
@@ -318,7 +346,7 @@ function useRecorder({
     [teardownNative, teardownWeb]
   );
 
-  return useMemo(() => ({ start, stop, isRecording, levels }), [isRecording, levels, start, stop]);
+  return useMemo(() => ({ start, stop, cancel, isRecording, levels }), [cancel, isRecording, levels, start, stop]);
 }
 
 export default useRecorder;

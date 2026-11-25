@@ -49,6 +49,7 @@ function getInitialSystemInfo() {
         isWindows: false,
         appleAiSupported: true,
         pushToTalkKey: "⌥ Option",
+        handsFreeKey: "⌥ + ⌘",
         modifierSymbol: "⌘",
         dashboardHotkey: "⌘⇧D",
         dictateHotkey: "⌘⇧Space",
@@ -63,6 +64,7 @@ function getInitialSystemInfo() {
         isWindows: true,
         appleAiSupported: false,
         pushToTalkKey: "Right Alt",
+        handsFreeKey: "Right Alt + Ctrl",
         modifierSymbol: "Ctrl+",
         dashboardHotkey: "Ctrl+Shift+D",
         dictateHotkey: "Ctrl+Shift+Space",
@@ -102,6 +104,7 @@ const defaultSettings = {
   hudGlass: true,
   trayIconStyle: "monochrome",
   voiceActionsEnabled: true,
+  handsFreeAutoSend: true,
   appAliases: [],
 };
 
@@ -115,7 +118,7 @@ function buildNavGroups(sys) {
     ],
     workflow: [
       { key: "hud", label: sys.isMac ? "HUD & Menu Bar" : "HUD & System Tray", icon: PanelTop, shortcut: `${mod}4` },
-      { key: "actions", label: "Voice Actions", icon: Zap, shortcut: `${mod}5` },
+      { key: "actions", label: "Vani Actions", icon: Zap, shortcut: `${mod}5` },
       { key: "modes", label: "Modes & Pipeline", icon: Sparkles, shortcut: `${mod}6` },
       { key: "dictionary", label: "Dictionary & Snippets", icon: BookOpen, shortcut: `${mod}7` },
       { key: "models", label: "Speech Models", icon: Cpu, shortcut: `${mod}8` },
@@ -707,9 +710,15 @@ export default function App() {
               : settings.whisperModel}{" "}
             · {settings.cleanupContext || "general"}
           </p>
-          <div className="mt-2 flex items-center justify-between border-t border-[var(--border)] pt-2 text-[10px] text-[var(--muted)]">
-            <span>Hold to speak</span>
-            <kbd className="vani-kbd font-mono text-[10px]">{systemInfo.pushToTalkKey}</kbd>
+          <div className="mt-2 space-y-1.5 border-t border-[var(--border)] pt-2 text-[10px] text-[var(--muted)]">
+            <div className="flex items-center justify-between">
+              <span>Hold to speak</span>
+              <kbd className="vani-kbd font-mono text-[10px]">{systemInfo.pushToTalkKey}</kbd>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Hands-Free</span>
+              <kbd className="vani-kbd font-mono text-[10px] text-[var(--emerald)]">{systemInfo.handsFreeKey}</kbd>
+            </div>
           </div>
         </div>
 

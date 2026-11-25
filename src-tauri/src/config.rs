@@ -73,6 +73,8 @@ pub struct Settings {
     pub tray_icon_style: String,
     #[serde(default = "default_true")]
     pub voice_actions_enabled: bool,
+    #[serde(default = "default_true")]
+    pub hands_free_auto_send: bool,
     #[serde(default)]
     pub app_aliases: Vec<AppAlias>,
 }
