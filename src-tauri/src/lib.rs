@@ -8,6 +8,8 @@ mod models;
 mod parakeet;
 mod transcribe;
 mod tray_icons;
+#[cfg(target_os = "windows")]
+mod win_audio;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -107,10 +109,16 @@ fn setup_tray(app: &mut App, initial_style: &str) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&dictate_item, &dashboard_item, &settings_item, &quit_item])?;
     let (icon_img, as_template) = tray_icons::build_tray_icon(initial_style, false);
 
+    let tooltip = if cfg!(target_os = "macos") {
+        "VANI — Hold ⌥ Option to dictate"
+    } else {
+        "VANI — Hold Right Alt to dictate"
+    };
+
     TrayIconBuilder::with_id("vani-tray")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .tooltip("VANI — Hold ⌥ Option to dictate")
+        .tooltip(tooltip)
         .icon(icon_img)
         .icon_as_template(as_template)
         .on_menu_event(move |app, event| match event.id.as_ref() {
@@ -216,8 +224,13 @@ pub fn run() {
             setup_tray(app, &initial_tray_style)?;
             setup_hotkeys(app)?;
 
-            // Start native Option-key monitor for hold-to-record
+            // Start native push-to-talk key monitor (Option on macOS, Right Alt on Windows)
             keymon::start_option_key_monitor(app.handle().clone());
+
+            #[cfg(target_os = "windows")]
+            if let Some(ov) = get_overlay(app.handle()) {
+                let _ = ov.set_focusable(false);
+            }
 
             // Open VANI Studio on launch, and intercept window close so VANI
             // keeps running cleanly in the menu bar with its Dock icon hidden.
@@ -235,6 +248,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::get_system_info,
             commands::get_settings,
             commands::save_settings,
             commands::dictation_complete,

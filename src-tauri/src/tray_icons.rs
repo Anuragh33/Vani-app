@@ -11,11 +11,15 @@ pub fn build_tray_icon(style: &str, recording: bool) -> (Image<'static>, bool) {
     let h: u32 = 36;
     let mut rgba = vec![0u8; (w * h * 4) as usize];
 
-    let use_template = match style {
-        "monochrome" => !recording,
-        "live-wave" => !recording,
-        "accent" | "dot-wave" => false,
-        _ => !recording,
+    let use_template = if cfg!(target_os = "macos") {
+        match style {
+            "monochrome" => !recording,
+            "live-wave" => !recording,
+            "accent" | "dot-wave" => false,
+            _ => !recording,
+        }
+    } else {
+        false
     };
 
     let draw_rounded_bar = |buf: &mut [u8], cx: f32, cy: f32, bw: f32, bh: f32, color: [u8; 4]| {
@@ -84,7 +88,12 @@ pub fn build_tray_icon(style: &str, recording: bool) -> (Image<'static>, bool) {
         [192, 132, 252, 255],
         [167, 139, 250, 235],
     ];
-    let mono_color: [u8; 4] = [0, 0, 0, 255]; // macOS template icon uses alpha mask
+    // macOS template icons use alpha mask (black); Windows/Linux tray icons render RGB directly.
+    let mono_color: [u8; 4] = if cfg!(target_os = "macos") {
+        [0, 0, 0, 255]
+    } else {
+        [244, 244, 248, 255]
+    };
 
     if style == "dot-wave" {
         let xs = [11.0f32, 17.5, 24.0];
@@ -102,8 +111,9 @@ pub fn build_tray_icon(style: &str, recording: bool) -> (Image<'static>, bool) {
         } else {
             [10.0, 18.0, 26.0, 18.0, 10.0]
         };
+        let is_mono_style = (style == "monochrome" || style == "live-wave" || (style != "accent" && style != "dot-wave")) && !recording;
         for i in 0..5 {
-            let col = if use_template { mono_color } else { rose_colors[i] };
+            let col = if is_mono_style { mono_color } else { rose_colors[i] };
             draw_rounded_bar(&mut rgba, xs[i], cy, 3.2, hs[i], col);
         }
         if recording && style == "live-wave" {

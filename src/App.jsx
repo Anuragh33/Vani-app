@@ -31,6 +31,47 @@ import Onboarding from "./components/Onboarding";
 import CommandPalette from "./components/CommandPalette";
 import { VaniLogo } from "./components/VaniLogo";
 
+function getInitialSystemInfo() {
+  const isMac =
+    typeof window !== "undefined" && window.vani
+      ? window.vani.platform === "darwin"
+      : typeof navigator !== "undefined"
+      ? navigator.platform.toLowerCase().includes("mac")
+      : true;
+  const isWindows = !isMac;
+  return isMac
+    ? {
+        os: "macos",
+        arch: "aarch64",
+        isMac: true,
+        isWindows: false,
+        appleAiSupported: true,
+        pushToTalkKey: "⌥ Option",
+        modifierSymbol: "⌘",
+        dashboardHotkey: "⌘⇧D",
+        dictateHotkey: "⌘⇧Space",
+        osName: "macOS",
+        fileManagerName: "Finder",
+        gpuBackend: "Metal GPU + Neural Engine",
+      }
+    : {
+        os: "windows",
+        arch: "x86_64",
+        isMac: false,
+        isWindows: true,
+        appleAiSupported: false,
+        pushToTalkKey: "Right Alt",
+        modifierSymbol: "Ctrl+",
+        dashboardHotkey: "Ctrl+Shift+D",
+        dictateHotkey: "Ctrl+Shift+Space",
+        osName: "Windows",
+        fileManagerName: "Explorer",
+        gpuBackend: "CPU + ONNX Runtime",
+      };
+}
+
+const INITIAL_SYS = getInitialSystemInfo();
+
 const defaultSettings = {
   language: "auto",
   hotkey: "CommandOrControl+Shift+Space",
@@ -46,8 +87,8 @@ const defaultSettings = {
   theme: "dark",
   openaiKey: "",
   anthropicKey: "",
-  transcriptionProvider: "apple",
-  cleanupProvider: "apple",
+  transcriptionProvider: INITIAL_SYS.isMac ? "apple" : "local",
+  cleanupProvider: INITIAL_SYS.isMac ? "apple" : "none",
   cleanupContext: "general",
   fillerWordRemoval: true,
   onboardingComplete: true,
@@ -60,28 +101,34 @@ const defaultSettings = {
   trayIconStyle: "monochrome",
 };
 
-const PRIMARY_NAV = [
-  { key: "home", label: "VANI Studio", icon: Mic, shortcut: "⌘1" },
-  { key: "history", label: "History", icon: History, shortcut: "⌘2" },
-  { key: "notes", label: "Voice Notes", icon: FileText, shortcut: "⌘3" },
-];
+function buildNavGroups(sys) {
+  const mod = sys.modifierSymbol || "⌘";
+  return {
+    primary: [
+      { key: "home", label: "VANI Studio", icon: Mic, shortcut: `${mod}1` },
+      { key: "history", label: "History", icon: History, shortcut: `${mod}2` },
+      { key: "notes", label: "Voice Notes", icon: FileText, shortcut: `${mod}3` },
+    ],
+    workflow: [
+      { key: "hud", label: sys.isMac ? "HUD & Menu Bar" : "HUD & System Tray", icon: PanelTop, shortcut: `${mod}4` },
+      { key: "modes", label: "Modes & Pipeline", icon: Sparkles, shortcut: `${mod}5` },
+      { key: "dictionary", label: "Dictionary & Snippets", icon: BookOpen, shortcut: `${mod}6` },
+      { key: "models", label: "Speech Models", icon: Cpu, shortcut: `${mod}7` },
+      { key: "usage", label: "Analytics", icon: BarChart3, shortcut: `${mod}8` },
+    ],
+  };
+}
 
-const WORKFLOW_NAV = [
-  { key: "hud", label: "HUD & Menu Bar", icon: PanelTop, shortcut: "⌘4" },
-  { key: "modes", label: "Modes & Pipeline", icon: Sparkles, shortcut: "⌘5" },
-  { key: "dictionary", label: "Dictionary & Snippets", icon: BookOpen, shortcut: "⌘6" },
-  { key: "models", label: "Speech Models", icon: Cpu, shortcut: "⌘7" },
-  { key: "usage", label: "Analytics", icon: BarChart3, shortcut: "⌘8" },
-];
-
-function HelpModal({ onClose }) {
+function HelpModal({ systemInfo, onClose }) {
+  const sys = systemInfo || INITIAL_SYS;
+  const mod = sys.modifierSymbol;
   const items = [
     {
       title: "How does push-to-talk work?",
-      body: "Hold ⌥ Option in any macOS app (Slack, Gmail, Cursor, Notes). Speak normally, then release — VANI transcribes locally and pastes cleanly at your cursor.",
+      body: `Hold ${sys.pushToTalkKey} in any ${sys.osName} app (Slack, Gmail, Cursor, Notes). Speak normally, then release — VANI transcribes locally and pastes cleanly at your cursor.`,
     },
     {
-      title: "Does any audio leave my Mac?",
+      title: sys.isMac ? "Does any audio leave my Mac?" : "Does any audio leave my PC?",
       body: "Never in local mode. VANI compiles whisper-rs and ONNX Runtime directly into the app binary. Turn on Privacy Shield to guarantee zero cloud calls and zero local history logging.",
     },
     {
@@ -90,7 +137,7 @@ function HelpModal({ onClose }) {
     },
     {
       title: "Keyboard shortcuts inside VANI",
-      body: "Press ⌘K for the Quick Command Palette, ⌘1–⌘7 to jump between views, ⌘, for Settings, and ⌘⇧D from anywhere on macOS to toggle the VANI window.",
+      body: `Press ${mod}K for the Quick Command Palette, ${mod}1–${mod}8 to jump between views, ${mod}, for Settings, and ${sys.dashboardHotkey} from anywhere on ${sys.osName} to toggle the VANI window.`,
     },
   ];
 
@@ -169,6 +216,7 @@ function SidebarNavItem({ item, active, badge, onClick }) {
 }
 
 export default function App() {
+  const [systemInfo, setSystemInfo] = useState(INITIAL_SYS);
   const [active, setActive] = useState("home");
   const [helpOpen, setHelpOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -218,7 +266,8 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-      const [savedSettings, nextNotes, nextHistory, nextModels, nextPermissions, status, appleStatus] = await Promise.all([
+      const [sysInfo, savedSettings, nextNotes, nextHistory, nextModels, nextPermissions, status, appleStatus] = await Promise.all([
+        window.vani?.getSystemInfo?.(),
         window.vani?.getSettings?.(),
         window.vani?.listNotes?.(),
         window.vani?.getHistory?.(),
@@ -229,8 +278,15 @@ export default function App() {
       ]);
 
       if (!mounted) return;
+      const effectiveSys = sysInfo ? { ...INITIAL_SYS, ...sysInfo } : INITIAL_SYS;
+      setSystemInfo(effectiveSys);
       if (savedSettings) {
-        setSettings((current) => ({ ...current, ...savedSettings }));
+        const sanitized = { ...savedSettings };
+        if (!effectiveSys.isMac) {
+          if (sanitized.transcriptionProvider === "apple") sanitized.transcriptionProvider = "local";
+          if (sanitized.cleanupProvider === "apple") sanitized.cleanupProvider = "none";
+        }
+        setSettings((current) => ({ ...current, ...sanitized }));
         if (savedSettings.onboardingComplete === false) setShowOnboarding(true);
       }
       setNotes(nextNotes || []);
@@ -426,6 +482,8 @@ export default function App() {
   };
 
   const activeDownloadCount = Object.keys(downloads).length;
+  const navGroups = buildNavGroups(systemInfo);
+  const usingAppleStt = systemInfo.isMac && settings.transcriptionProvider === "apple";
 
   const renderContent = () => {
     switch (active) {
@@ -433,6 +491,7 @@ export default function App() {
         return (
           <HomeView
             settings={settings}
+            systemInfo={systemInfo}
             onSaveSettings={saveSettings}
             permissions={permissions}
             whisperStatus={whisperStatus}
@@ -448,6 +507,7 @@ export default function App() {
         return (
           <HistoryView
             history={history}
+            systemInfo={systemInfo}
             onClear={handleClearHistory}
             onSaveAsNote={saveTextAsNote}
             onReinject={handleReinject}
@@ -458,6 +518,7 @@ export default function App() {
         return (
           <VaniNotes
             notes={notes}
+            systemInfo={systemInfo}
             onSaveNote={saveNote}
             onDeleteNote={deleteNote}
             onExportNote={(note) => window.vani?.exportNote?.(note)}
@@ -468,13 +529,22 @@ export default function App() {
         return (
           <HudStudioView
             settings={settings}
+            systemInfo={systemInfo}
             onSaveSettings={saveSettings}
             onNavigate={setActive}
             onNotify={notify}
           />
         );
       case "modes":
-        return <ModesView settings={settings} appleAi={appleAi} onSaveSettings={saveSettings} onNotify={notify} />;
+        return (
+          <ModesView
+            settings={settings}
+            systemInfo={systemInfo}
+            appleAi={appleAi}
+            onSaveSettings={saveSettings}
+            onNotify={notify}
+          />
+        );
       case "dictionary":
         return <DictionaryView settings={settings} onSaveSettings={saveSettings} onNotify={notify} />;
       case "models":
@@ -484,6 +554,7 @@ export default function App() {
             downloads={downloads}
             activeModel={settings.whisperModel}
             settings={settings}
+            systemInfo={systemInfo}
             appleAi={appleAi}
             onSaveSettings={saveSettings}
             onDownload={handleDownloadModel}
@@ -502,6 +573,7 @@ export default function App() {
         return (
           <SettingsPanel
             settings={settings}
+            systemInfo={systemInfo}
             onChange={saveSettings}
             models={models}
             whisperStatus={whisperStatus}
@@ -563,13 +635,13 @@ export default function App() {
             <Search className="h-3.5 w-3.5" />
             <span>Quick actions…</span>
           </span>
-          <kbd className="vani-kbd font-mono text-[10px]">⌘K</kbd>
+          <kbd className="vani-kbd font-mono text-[10px]">{systemInfo.modifierSymbol}K</kbd>
         </button>
 
         {/* Navigation Groups */}
         <nav className="mt-4 flex-1 space-y-5 overflow-y-auto pr-0.5">
           <div className="space-y-0.5">
-            {PRIMARY_NAV.map((item) => (
+            {navGroups.primary.map((item) => (
               <SidebarNavItem
                 key={item.key}
                 item={item}
@@ -585,7 +657,7 @@ export default function App() {
               Intelligence
             </p>
             <div className="space-y-0.5">
-              {WORKFLOW_NAV.map((item) => (
+              {navGroups.workflow.map((item) => (
                 <SidebarNavItem
                   key={item.key}
                   item={item}
@@ -604,7 +676,7 @@ export default function App() {
             <span className="flex items-center gap-1.5 font-medium text-[var(--text)]">
               <span
                 className={`h-2 w-2 rounded-full ${
-                  settings.transcriptionProvider === "apple" ||
+                  usingAppleStt ||
                   whisperStatus?.modelInstalled ||
                   settings.transcriptionProvider === "openai"
                     ? "bg-[var(--emerald)]"
@@ -616,14 +688,14 @@ export default function App() {
             {settings.privacyMode && <Shield className="h-3 w-3 text-[var(--emerald)]" />}
           </div>
           <p className="mt-1 truncate font-mono text-[10px] text-[var(--muted)]">
-            {settings.transcriptionProvider === "apple"
+            {usingAppleStt
               ? "Apple On-Device"
               : settings.whisperModel}{" "}
             · {settings.cleanupContext || "general"}
           </p>
           <div className="mt-2 flex items-center justify-between border-t border-[var(--border)] pt-2 text-[10px] text-[var(--muted)]">
             <span>Hold to speak</span>
-            <kbd className="vani-kbd font-mono text-[10px]">⌥ Option</kbd>
+            <kbd className="vani-kbd font-mono text-[10px]">{systemInfo.pushToTalkKey}</kbd>
           </div>
         </div>
 
@@ -673,15 +745,17 @@ export default function App() {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         settings={settings}
+        systemInfo={systemInfo}
         onNavigate={setActive}
         onSaveSettings={saveSettings}
         onNotify={notify}
       />
 
-      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+      {helpOpen && <HelpModal systemInfo={systemInfo} onClose={() => setHelpOpen(false)} />}
 
       {showOnboarding && (
         <Onboarding
+          systemInfo={systemInfo}
           onComplete={() => setShowOnboarding(false)}
           onSaveKeys={(keys) => saveSettings(keys)}
           whisperStatus={whisperStatus}

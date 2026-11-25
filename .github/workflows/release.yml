@@ -1,0 +1,170 @@
+name: Build & Release VANI (macOS + Windows)
+
+on:
+  push:
+    branches:
+      - "tauri-v2"
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Publish artifacts to GitHub Release"
+        type: boolean
+        default: false
+      release_tag:
+        description: "Tag name if publishing (e.g. v2.2.0)"
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: macOS (Apple Silicon)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Ensure Swift Apple AI helper binary exists
+        run: |
+          mkdir -p src-tauri/bin
+          if swiftc -O -parse-as-library src-tauri/swift/vani_apple_ai.swift -o src-tauri/bin/vani-apple-ai.new 2>/dev/null; then
+            mv src-tauri/bin/vani-apple-ai.new src-tauri/bin/vani-apple-ai
+            chmod +x src-tauri/bin/vani-apple-ai
+            echo "Compiled fresh vani-apple-ai helper"
+          elif [ -f src-tauri/bin/vani-apple-ai ]; then
+            chmod +x src-tauri/bin/vani-apple-ai
+            echo "Using prebuilt macOS 26 vani-apple-ai helper from repo"
+          else
+            echo "No macOS 26 SDK available; building minimal fallback helper"
+            cat << 'EOF' > /tmp/vani_fallback.swift
+          import Foundation
+          print("{\"foundationModelAvailable\":false,\"foundationModelReason\":\"Requires macOS 26+\",\"speechAnalyzerAvailable\":false,\"micPermission\":\"unknown\",\"speechPermission\":\"unknown\",\"macosVersion\":\"\"}")
+          EOF
+            swiftc -O /tmp/vani_fallback.swift -o src-tauri/bin/vani-apple-ai
+            chmod +x src-tauri/bin/vani-apple-ai
+          fi
+
+      - name: Build VANI macOS app bundle
+        run: npx tauri build --bundles app
+
+      - name: Ad-hoc sign with entitlements and build DMG
+        run: |
+          APP_PATH="src-tauri/target/release/bundle/macos/VANI.app"
+          codesign --force --deep --sign - \
+            --identifier com.vani.app \
+            --entitlements src-tauri/entitlements.plist \
+            "$APP_PATH"
+          VERSION=$(node -p "require('./package.json').version")
+          mkdir -p release-artifacts dmg-stage
+          cp -R "$APP_PATH" dmg-stage/VANI.app
+          ln -s /Applications dmg-stage/Applications
+          hdiutil create -volname "VANI" -srcfolder dmg-stage -ov -format UDZO \
+            "release-artifacts/VANI-${VERSION}-macos-arm64.dmg"
+
+      - name: Upload macOS DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vani-macos-arm64
+          path: release-artifacts/*.dmg
+
+  build-windows:
+    name: Windows (x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install LLVM/Clang (for whisper-rs bindgen)
+        shell: pwsh
+        run: |
+          if (!(Get-Command clang -ErrorAction SilentlyContinue)) {
+            choco install llvm -y --no-progress
+          }
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build VANI Windows installers (NSIS + MSI)
+        run: npx tauri build --bundles nsis,msi
+
+      - name: Collect Windows installers
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          New-Item -ItemType Directory -Force -Path release-artifacts | Out-Null
+          $nsis = Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          if ($nsis) {
+            Copy-Item $nsis.FullName "release-artifacts/VANI-${version}-windows-x64-setup.exe"
+          }
+          $msi = Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          if ($msi) {
+            Copy-Item $msi.FullName "release-artifacts/VANI-${version}-windows-x64.msi"
+          }
+          Get-ChildItem release-artifacts
+
+      - name: Upload Windows installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vani-windows-x64
+          path: release-artifacts/*
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-macos, build-windows]
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release == true)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+          merge-multiple: true
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.release_tag }}" ]; then
+            TAG="${{ inputs.release_tag }}"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" all-artifacts/* --clobber
+          else
+            gh release create "$TAG" all-artifacts/* \
+              --title "VANI ${TAG} (macOS + Windows)" \
+              --notes "Cross-platform release for macOS (Apple Silicon) and Windows (x64)."
+          fi

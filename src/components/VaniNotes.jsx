@@ -44,7 +44,8 @@ function countWords(text) {
   return (text || "").trim().split(/\s+/).filter(Boolean).length;
 }
 
-export default function VaniNotes({ notes, onSaveNote, onDeleteNote, onExportNote, onNotify }) {
+export default function VaniNotes({ notes, systemInfo, onSaveNote, onDeleteNote, onExportNote, onNotify }) {
+  const pushToTalkKey = systemInfo?.pushToTalkKey || (systemInfo?.isWindows ? "Right Alt" : "⌥ Option");
   const [search, setSearch] = useState("");
   const [activeId, setActiveId] = useState(notes[0]?.id || null);
   const [viewMode, setViewMode] = useState("split"); // edit | split | preview
@@ -372,7 +373,7 @@ export default function VaniNotes({ notes, onSaveNote, onDeleteNote, onExportNot
                   value={activeNote.content}
                   onChange={(e) => saveCurrentNote(e.target.value)}
                   className="h-full min-h-[400px] w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] p-4 font-mono text-[13px] leading-7 text-[var(--text)] outline-none transition focus:border-[var(--brand)]"
-                  placeholder="Start writing in Markdown, click Dictate above, or hold ⌥ Option anywhere…"
+                  placeholder={`Start writing in Markdown, click Dictate above, or hold ${pushToTalkKey} anywhere…`}
                 />
               )}
               {viewMode !== "edit" && (

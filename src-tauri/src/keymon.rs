@@ -1,11 +1,15 @@
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::commands::AppState;
 use crate::tray_icons;
 
+#[cfg(target_os = "macos")]
+use std::sync::{Arc, Mutex};
+
+#[cfg(target_os = "macos")]
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop};
+#[cfg(target_os = "macos")]
 use core_graphics::event::{
     CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
 };
@@ -27,6 +31,7 @@ pub fn is_accessibility_trusted() -> bool {
     }
 }
 
+#[cfg(target_os = "macos")]
 pub fn start_option_key_monitor(app: AppHandle) {
     std::thread::spawn(move || {
         // Retry automatically until Accessibility permission is granted so the user
@@ -88,17 +93,124 @@ pub fn start_option_key_monitor(app: AppHandle) {
     });
 }
 
+#[cfg(target_os = "windows")]
+mod win_hook {
+    use super::*;
+    use once_cell::sync::OnceCell;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, VK_LWIN, VK_RMENU, VK_RWIN,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
+        KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    };
+
+    static APP_HANDLE: OnceCell<AppHandle> = OnceCell::new();
+    static RALT_PRESSED: AtomicBool = AtomicBool::new(false);
+
+    unsafe extern "system" fn ll_keyboard_proc(
+        code: i32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        if code >= 0 {
+            let kb = &*(lparam as *const KBDLLHOOKSTRUCT);
+            if kb.vkCode == VK_RMENU as u32 {
+                let msg = wparam as u32;
+                let win_down = GetAsyncKeyState(VK_LWIN as i32) < 0
+                    || GetAsyncKeyState(VK_RWIN as i32) < 0;
+
+                if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && !win_down {
+                    if !RALT_PRESSED.swap(true, Ordering::SeqCst) {
+                        if let Some(app) = APP_HANDLE.get() {
+                            let app_bg = app.clone();
+                            std::thread::spawn(move || begin_overlay_dictation(&app_bg));
+                        }
+                    }
+                } else if msg == WM_KEYUP || msg == WM_SYSKEYUP {
+                    if RALT_PRESSED.swap(false, Ordering::SeqCst) {
+                        if let Some(app) = APP_HANDLE.get() {
+                            let app_bg = app.clone();
+                            std::thread::spawn(move || end_overlay_dictation(&app_bg));
+                        }
+                    }
+                }
+            }
+        }
+        CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
+    }
+
+    pub fn start(app: AppHandle) {
+        let _ = APP_HANDLE.set(app);
+        std::thread::spawn(|| unsafe {
+            let hook = SetWindowsHookExW(
+                WH_KEYBOARD_LL,
+                Some(ll_keyboard_proc),
+                std::ptr::null_mut(),
+                0,
+            );
+            if hook.is_null() {
+                eprintln!("VANI: Failed to install Windows WH_KEYBOARD_LL hook.");
+                return;
+            }
+            eprintln!("VANI: Windows Right Alt push-to-talk hook active.");
+            let mut msg: MSG = std::mem::zeroed();
+            while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        });
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn start_option_key_monitor(app: AppHandle) {
+    win_hook::start(app);
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub fn start_option_key_monitor(_app: AppHandle) {}
+
 fn get_frontmost_app() -> Option<String> {
-    let out = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg("tell application \"System Events\" to get name of first application process whose frontmost is true")
-        .output()
-        .ok()?;
-    let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if name.is_empty() || name.eq_ignore_ascii_case("VANI") || name.eq_ignore_ascii_case("vani") {
+    #[cfg(target_os = "macos")]
+    {
+        let out = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to get name of first application process whose frontmost is true")
+            .output()
+            .ok()?;
+        let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if name.is_empty() || name.eq_ignore_ascii_case("VANI") || name.eq_ignore_ascii_case("vani") {
+            None
+        } else {
+            Some(name)
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetForegroundWindow, GetWindowThreadProcessId,
+        };
+        unsafe {
+            let hwnd = GetForegroundWindow();
+            if hwnd.is_null() {
+                return None;
+            }
+            let mut pid: u32 = 0;
+            GetWindowThreadProcessId(hwnd, &mut pid);
+            if pid == std::process::id() {
+                return None;
+            }
+            Some(format!("hwnd:{}", hwnd as usize))
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
         None
-    } else {
-        Some(name)
     }
 }
 
@@ -124,8 +236,10 @@ pub fn position_overlay(app: &AppHandle, w: &tauri::WebviewWindow) {
         let win_w = (320.0 * scale) as i32;
         let win_h = (160.0 * scale) as i32;
         let pad_x = (24.0 * scale) as i32;
-        let top_y = origin.y + (42.0 * scale) as i32;
-        let bot_y = (origin.y + sh - win_h - (44.0 * scale) as i32).max(top_y);
+        let top_margin = if cfg!(target_os = "macos") { 42.0 } else { 18.0 };
+        let bot_margin = if cfg!(target_os = "windows") { 64.0 } else { 44.0 };
+        let top_y = origin.y + (top_margin * scale) as i32;
+        let bot_y = (origin.y + sh - win_h - (bot_margin * scale) as i32).max(top_y);
 
         let (wx, wy) = match hud_position.as_str() {
             "top-left" => (origin.x + pad_x, top_y),
@@ -158,11 +272,15 @@ pub fn begin_overlay_dictation(app: &AppHandle) {
     *state.frontmost_app.lock().unwrap() = frontmost.clone();
 
     if let Some(w) = app.get_webview_window("overlay") {
+        #[cfg(target_os = "windows")]
+        let _ = w.set_focusable(false);
+
         position_overlay(app, &w);
         let _ = w.show();
         let _ = w.set_always_on_top(true);
 
         // Re-activate the target app so keyboard focus stays where the user was typing
+        #[cfg(target_os = "macos")]
         if let Some(name) = &frontmost {
             let safe = name.replace('"', "");
             let _ = std::process::Command::new("osascript")
@@ -170,6 +288,20 @@ pub fn begin_overlay_dictation(app: &AppHandle) {
                 .arg(format!("tell application \"{}\" to activate", safe))
                 .spawn();
         }
+
+        #[cfg(target_os = "windows")]
+        if let Some(tag) = &frontmost {
+            if let Some(raw) = tag.strip_prefix("hwnd:") {
+                if let Ok(addr) = raw.parse::<usize>() {
+                    unsafe {
+                        windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow(
+                            addr as *mut std::ffi::c_void,
+                        );
+                    }
+                }
+            }
+        }
+
         let _ = w.emit("dictation-start", ());
     }
 }

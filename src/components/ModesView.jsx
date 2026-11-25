@@ -90,9 +90,14 @@ function simulateTransform(input, settings) {
   return out;
 }
 
-export default function ModesView({ settings, appleAi, onSaveSettings, onNotify }) {
+export default function ModesView({ settings, systemInfo, appleAi, onSaveSettings, onNotify }) {
+  const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
   const activeModeId = settings.cleanupContext || "general";
   const activeMode = MODES.find((m) => m.id === activeModeId) || MODES[0];
+  const effectiveCleanup =
+    !isMac && settings.cleanupProvider === "apple"
+      ? "none"
+      : settings.cleanupProvider || (isMac ? "apple" : "none");
   const [sandboxText, setSandboxText] = useState(
     "um hey team uh let's book a review using cal and ship the VANI update today"
   );
@@ -131,14 +136,14 @@ export default function ModesView({ settings, appleAi, onSaveSettings, onNotify 
           <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--brand)]" />
           <span className="text-[var(--muted)]">Cleanup Engine:</span>
           <select
-            value={settings.cleanupProvider || "apple"}
+            value={effectiveCleanup}
             onChange={(e) => {
               onSaveSettings({ cleanupProvider: e.target.value });
               onNotify?.("Updated cleanup engine");
             }}
             className="bg-transparent font-semibold text-[var(--text)] outline-none cursor-pointer"
           >
-            <option value="apple">Apple Foundation Model (On-Device)</option>
+            {isMac && <option value="apple">Apple Foundation Model (On-Device)</option>}
             <option value="none">Local Rules Only</option>
             <option value="anthropic">Anthropic Claude (BYOK)</option>
             <option value="openai">OpenAI GPT-4o mini (BYOK)</option>
@@ -219,7 +224,9 @@ export default function ModesView({ settings, appleAi, onSaveSettings, onNotify 
               {
                 key: "privacyMode",
                 title: "Privacy Shield (100% On-Device)",
-                desc: "Block all cloud APIs & skip history. Apple Foundation Model stays active locally.",
+                desc: isMac
+                  ? "Block all cloud APIs & skip history. Apple Foundation Model stays active locally."
+                  : "Block all cloud APIs & skip history for 100% offline local dictation.",
               },
             ].map((item) => (
               <div
@@ -286,9 +293,9 @@ export default function ModesView({ settings, appleAi, onSaveSettings, onNotify 
               <div className="rounded-xl border border-[var(--brand)]/30 bg-[var(--bg-app)] p-4">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--brand)]">
-                    {appleTestOut ? "Apple Foundation Model Output" : "Local Preview Output"}
+                    {isMac && appleTestOut ? "Apple Foundation Model Output" : "Local Preview Output"}
                   </p>
-                  {appleAi?.foundationModelAvailable && (
+                  {isMac && appleAi?.foundationModelAvailable && (
                     <button
                       type="button"
                       onClick={runLiveApplePolish}

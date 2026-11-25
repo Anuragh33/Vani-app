@@ -20,6 +20,7 @@ export default function CommandPalette({
   open,
   onClose,
   settings,
+  systemInfo,
   onNavigate,
   onSaveSettings,
   onNotify,
@@ -27,6 +28,8 @@ export default function CommandPalette({
   const [query, setQuery] = useState("");
   const [selectedIdx, setSelectedIdx] = useState(0);
   const inputRef = useRef(null);
+  const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
+  const mod = systemInfo?.modifierSymbol || (isMac ? "⌘" : "Ctrl+");
 
   useEffect(() => {
     if (open) {
@@ -38,15 +41,15 @@ export default function CommandPalette({
 
   const commands = useMemo(
     () => [
-      { id: "nav-home", group: "Navigate", label: "VANI Studio", hint: "⌘1", icon: Mic, run: () => onNavigate("home") },
-      { id: "nav-history", group: "Navigate", label: "Transcription History", hint: "⌘2", icon: History, run: () => onNavigate("history") },
-      { id: "nav-notes", group: "Navigate", label: "Voice Notes", hint: "⌘3", icon: FileText, run: () => onNavigate("notes") },
-      { id: "nav-hud", group: "Navigate", label: "HUD & Menu Bar Preview", hint: "⌘4", icon: PanelTop, run: () => onNavigate("hud") },
-      { id: "nav-modes", group: "Navigate", label: "Modes & Pipeline", hint: "⌘5", icon: Sparkles, run: () => onNavigate("modes") },
-      { id: "nav-dict", group: "Navigate", label: "Dictionary & Snippets", hint: "⌘6", icon: BookOpen, run: () => onNavigate("dictionary") },
-      { id: "nav-models", group: "Navigate", label: "Local Speech Models", hint: "⌘7", icon: Cpu, run: () => onNavigate("models") },
-      { id: "nav-usage", group: "Navigate", label: "Productivity & Analytics", hint: "⌘8", icon: BarChart3, run: () => onNavigate("usage") },
-      { id: "nav-settings", group: "Navigate", label: "Settings", hint: "⌘,", icon: Settings, run: () => onNavigate("settings") },
+      { id: "nav-home", group: "Navigate", label: "VANI Studio", hint: `${mod}1`, icon: Mic, run: () => onNavigate("home") },
+      { id: "nav-history", group: "Navigate", label: "Transcription History", hint: `${mod}2`, icon: History, run: () => onNavigate("history") },
+      { id: "nav-notes", group: "Navigate", label: "Voice Notes", hint: `${mod}3`, icon: FileText, run: () => onNavigate("notes") },
+      { id: "nav-hud", group: "Navigate", label: isMac ? "HUD & Menu Bar Preview" : "HUD & System Tray Preview", hint: `${mod}4`, icon: PanelTop, run: () => onNavigate("hud") },
+      { id: "nav-modes", group: "Navigate", label: "Modes & Pipeline", hint: `${mod}5`, icon: Sparkles, run: () => onNavigate("modes") },
+      { id: "nav-dict", group: "Navigate", label: "Dictionary & Snippets", hint: `${mod}6`, icon: BookOpen, run: () => onNavigate("dictionary") },
+      { id: "nav-models", group: "Navigate", label: "Local Speech Models", hint: `${mod}7`, icon: Cpu, run: () => onNavigate("models") },
+      { id: "nav-usage", group: "Navigate", label: "Productivity & Analytics", hint: `${mod}8`, icon: BarChart3, run: () => onNavigate("usage") },
+      { id: "nav-settings", group: "Navigate", label: "Settings", hint: `${mod},`, icon: Settings, run: () => onNavigate("settings") },
       {
         id: "act-theme",
         group: "Actions",
@@ -80,7 +83,7 @@ export default function CommandPalette({
         },
       })),
     ],
-    [settings.theme, settings.privacyMode, onNavigate, onSaveSettings, onNotify]
+    [settings.theme, settings.privacyMode, isMac, mod, onNavigate, onSaveSettings, onNotify]
   );
 
   const filtered = useMemo(() => {

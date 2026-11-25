@@ -20,6 +20,44 @@ function subscribe(eventName, callback) {
 
 // ── Browser-only preview sandbox (never used inside the compiled Tauri app) ──
 function createBrowserPreviewBridge() {
+  const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const previewOsParam = (params?.get("previewOs") || "").toLowerCase();
+  const isWinPreview =
+    previewOsParam === "windows" ||
+    previewOsParam === "win" ||
+    (!previewOsParam && typeof navigator !== "undefined" && navigator.platform.toLowerCase().includes("win"));
+  const isMacPreview = !isWinPreview;
+
+  const previewSystemInfo = isMacPreview
+    ? {
+        os: "macos",
+        arch: "aarch64",
+        isMac: true,
+        isWindows: false,
+        appleAiSupported: true,
+        pushToTalkKey: "⌥ Option",
+        modifierSymbol: "⌘",
+        dashboardHotkey: "⌘⇧D",
+        dictateHotkey: "⌘⇧Space",
+        osName: "macOS",
+        fileManagerName: "Finder",
+        gpuBackend: "Metal GPU + Neural Engine",
+      }
+    : {
+        os: "windows",
+        arch: "x86_64",
+        isMac: false,
+        isWindows: true,
+        appleAiSupported: false,
+        pushToTalkKey: "Right Alt",
+        modifierSymbol: "Ctrl+",
+        dashboardHotkey: "Ctrl+Shift+D",
+        dictateHotkey: "Ctrl+Shift+Space",
+        osName: "Windows",
+        fileManagerName: "Explorer",
+        gpuBackend: "CPU + ONNX Runtime",
+      };
+
   const listeners = new Map();
   const emitLocal = (event, payload) => {
     const set = listeners.get(event);
@@ -46,7 +84,9 @@ function createBrowserPreviewBridge() {
     whisperModel: "ggml-base.en",
     threads: 6,
     translate: false,
-    customVocabulary: "VANI, whisper-rs, Parakeet, Tauri, macOS, Apple Silicon",
+    customVocabulary: isMacPreview
+      ? "VANI, whisper-rs, Parakeet, Tauri, macOS, Apple Silicon"
+      : "VANI, whisper-rs, Parakeet, Tauri, Windows",
     snippets: [
       { trigger: "addr", expansion: "248 Market Street, Suite 400, San Francisco, CA" },
       { trigger: "cal", expansion: "https://cal.com/vani-team/30min" },
@@ -55,8 +95,8 @@ function createBrowserPreviewBridge() {
     theme: "dark",
     openaiKey: "",
     anthropicKey: "",
-    transcriptionProvider: "apple",
-    cleanupProvider: "apple",
+    transcriptionProvider: isMacPreview ? "apple" : "local",
+    cleanupProvider: isMacPreview ? "apple" : "none",
     cleanupContext: "general",
     fillerWordRemoval: true,
     onboardingComplete: true,
@@ -104,8 +144,12 @@ function createBrowserPreviewBridge() {
     {
       id: "h-3",
       timestamp: daysAgo(1, 3),
-      rawText: "Remember to benchmark Parakeet TDT v2 against Whisper Large v3 Turbo on Apple Silicon M3 before publishing the changelog.",
-      cleanedText: "Remember to benchmark Parakeet TDT v2 against Whisper Large v3 Turbo on Apple Silicon M3 before publishing the changelog.",
+      rawText: isMacPreview
+        ? "Remember to benchmark Parakeet TDT v2 against Whisper Large v3 Turbo on Apple Silicon M3 before publishing the changelog."
+        : "Remember to benchmark Parakeet TDT v2 against Whisper Large v3 Turbo on Windows before publishing the changelog.",
+      cleanedText: isMacPreview
+        ? "Remember to benchmark Parakeet TDT v2 against Whisper Large v3 Turbo on Apple Silicon M3 before publishing the changelog."
+        : "Remember to benchmark Parakeet TDT v2 against Whisper Large v3 Turbo on Windows before publishing the changelog.",
       provider: "whisper-rs:ggml-base.en",
       injected: true,
       mode: "paste",
@@ -172,6 +216,7 @@ function createBrowserPreviewBridge() {
 
   return {
     isPreview: true,
+    getSystemInfo: async () => ({ ...previewSystemInfo }),
     getSettings: async () => ({ ...settings }),
     saveSettings: async (partial) => {
       settings = { ...settings, ...partial };
@@ -303,20 +348,33 @@ function createBrowserPreviewBridge() {
       const active = models.find((m) => m.id === settings.whisperModel);
       return {
         binaryFound: true,
-        binary: "built-in (whisper-rs Metal + ONNX)",
+        binary: isMacPreview ? "built-in (whisper-rs Metal + ONNX)" : "built-in (whisper-rs + ONNX)",
         model: settings.whisperModel,
         modelInstalled: Boolean(active?.installed),
-        modelPath: `~/Library/Application Support/com.vani.app/models/${settings.whisperModel}.bin`,
-        modelsDir: `~/Library/Application Support/com.vani.app/models`,
+        modelPath: isMacPreview
+          ? `~/Library/Application Support/com.vani.app/models/${settings.whisperModel}.bin`
+          : `C:\\Users\\Anuragh\\AppData\\Roaming\\com.vani.app\\models\\${settings.whisperModel}.bin`,
+        modelsDir: isMacPreview
+          ? `~/Library/Application Support/com.vani.app/models`
+          : `C:\\Users\\Anuragh\\AppData\\Roaming\\com.vani.app\\models`,
       };
     },
-    appleAiStatus: async () => ({
-      foundationModelAvailable: true,
-      foundationModelReason: "ready",
-      speechAnalyzerAvailable: true,
-      macosVersion: "27.2",
-      helperFound: true,
-    }),
+    appleAiStatus: async () =>
+      isMacPreview
+        ? {
+            foundationModelAvailable: true,
+            foundationModelReason: "ready",
+            speechAnalyzerAvailable: true,
+            macosVersion: "27.2",
+            helperFound: true,
+          }
+        : {
+            foundationModelAvailable: false,
+            foundationModelReason: "Not available on Windows",
+            speechAnalyzerAvailable: false,
+            macosVersion: "",
+            helperFound: false,
+          },
     testApplePolish: async (text, context = "general") => {
       await new Promise((r) => setTimeout(r, 320));
       let out = applyLocalPipeline(text);
@@ -341,12 +399,13 @@ function createBrowserPreviewBridge() {
     testAnthropicKey: async (key) =>
       key?.startsWith("sk-ant-") ? { valid: true } : { valid: false, error: "Key should start with sk-ant-" },
 
-    platform: "darwin",
+    platform: isMacPreview ? "darwin" : "win32",
   };
 }
 
 const tauriBridge = {
   isPreview: false,
+  getSystemInfo: () => invoke("get_system_info"),
   // Settings
   getSettings: () => invoke("get_settings"),
   saveSettings: (settings) => invoke("save_settings", { settings }),
@@ -415,7 +474,11 @@ const tauriBridge = {
   testOpenAIKey: (key) => invoke("test_openai_key", { key }),
   testAnthropicKey: (key) => invoke("test_anthropic_key", { key }),
 
-  platform: navigator.platform.toLowerCase().includes("mac") ? "darwin" : "other",
+  platform: navigator.platform.toLowerCase().includes("mac")
+    ? "darwin"
+    : navigator.platform.toLowerCase().includes("win")
+    ? "win32"
+    : "linux",
 };
 
 export const vani = isTauriRuntime ? tauriBridge : createBrowserPreviewBridge();

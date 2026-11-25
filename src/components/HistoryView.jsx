@@ -26,7 +26,9 @@ function getDateBucket(iso) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-export default function HistoryView({ history, onClear, onSaveAsNote, onReinject, onNotify }) {
+export default function HistoryView({ history, systemInfo, onClear, onSaveAsNote, onReinject, onNotify }) {
+  const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
+  const pushToTalkKey = systemInfo?.pushToTalkKey || (isMac ? "⌥ Option" : "Right Alt");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all"); // all | local | cloud | injected | cleaned
   const [rawMap, setRawMap] = useState({});
@@ -73,7 +75,7 @@ export default function HistoryView({ history, onClear, onSaveAsNote, onReinject
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Transcription History</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Every local dictation is searchable, diffable against raw Whisper output, and stored only on this Mac.
+            Every local dictation is searchable, diffable against raw Whisper output, and stored only on this {isMac ? "Mac" : "PC"}.
           </p>
         </div>
 
@@ -163,7 +165,7 @@ export default function HistoryView({ history, onClear, onSaveAsNote, onReinject
           </p>
           <p className="mt-1 text-xs text-[var(--muted)]">
             {history.length === 0
-              ? "Hold ⌥ Option anywhere or try the Voice Studio playground."
+              ? `Hold ${pushToTalkKey} anywhere or try the Voice Studio playground.`
               : "Try clearing your search or switching filters."}
           </p>
         </div>

@@ -20,7 +20,7 @@ const MODEL_META = {
   "ggml-small": { speed: 4, accuracy: 4, note: "Balanced multilingual speed & quality" },
   "ggml-medium.en": { speed: 3, accuracy: 4, note: "High-precision English for technical speech" },
   "ggml-medium": { speed: 3, accuracy: 4, note: "High-precision multilingual transcription" },
-  "ggml-large-v3-turbo": { speed: 4, accuracy: 5, recommended: true, note: "Best quality-to-speed ratio on Apple Silicon" },
+  "ggml-large-v3-turbo": { speed: 4, accuracy: 5, recommended: true, note: "Best quality-to-speed ratio across 99 languages" },
   "ggml-large-v3": { speed: 2, accuracy: 5, note: "Maximum transcription fidelity" },
   "parakeet-tdt-0.6b-v2": { speed: 5, accuracy: 5, note: "NVIDIA TDT ONNX — blazing fast English ASR" },
   "parakeet-tdt-1.1b-v2": { speed: 4, accuracy: 5, note: "NVIDIA flagship 1.1B English ONNX model" },
@@ -58,6 +58,7 @@ export default function ModelsView({
   downloads,
   activeModel,
   settings,
+  systemInfo,
   appleAi,
   onSaveSettings,
   onDownload,
@@ -72,9 +73,10 @@ export default function ModelsView({
   const [filter, setFilter] = useState("all"); // all | installed | whisper | parakeet | multilingual
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
+  const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
   const installedModels = useMemo(() => (models || []).filter((m) => m.installed), [models]);
-  const usingAppleStt = settings?.transcriptionProvider === "apple";
-  const usingApplePolish = settings?.cleanupProvider === "apple";
+  const usingAppleStt = isMac && settings?.transcriptionProvider === "apple";
+  const usingApplePolish = isMac && settings?.cleanupProvider === "apple";
 
   const filteredModels = useMemo(() => {
     return (models || []).filter((m) => {
@@ -90,11 +92,24 @@ export default function ModelsView({
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">AI &amp; Speech Models</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">
+            {isMac ? "AI & Speech Models" : "Speech Models"}
+          </h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Use macOS’s built-in <strong>Apple On-Device AI</strong> with zero downloads — or run open-source{" "}
-            <code className="font-mono text-xs text-[var(--brand)]">Whisper (Metal GPU)</code> and{" "}
-            <code className="font-mono text-xs text-[var(--violet)]">NVIDIA Parakeet ONNX</code> locally.
+            {isMac ? (
+              <>
+                Use macOS’s built-in <strong>Apple On-Device AI</strong> with zero downloads — or run open-source{" "}
+                <code className="font-mono text-xs text-[var(--brand)]">Whisper (Metal GPU)</code> and{" "}
+                <code className="font-mono text-xs text-[var(--violet)]">NVIDIA Parakeet ONNX</code> locally.
+              </>
+            ) : (
+              <>
+                Run open-source{" "}
+                <code className="font-mono text-xs text-[var(--brand)]">Whisper GGML</code> and{" "}
+                <code className="font-mono text-xs text-[var(--violet)]">NVIDIA Parakeet ONNX</code> speech models
+                100% locally on {systemInfo?.osName || "Windows"}.
+              </>
+            )}
           </p>
         </div>
 
@@ -108,7 +123,8 @@ export default function ModelsView({
         </button>
       </div>
 
-      {/* Built-in Apple On-Device AI Section */}
+      {/* Built-in Apple On-Device AI Section — macOS ONLY (completely hidden on Windows/Linux) */}
+      {isMac && (
       <div className="space-y-2.5">
         <div className="flex items-center justify-between">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand)]">
@@ -236,6 +252,7 @@ export default function ModelsView({
           </div>
         </div>
       </div>
+      )}
 
       {/* Summary Strip for Open-Source Models */}
       <div className="grid gap-3 sm:grid-cols-3">
@@ -258,9 +275,15 @@ export default function ModelsView({
           <p className="mt-0.5 text-xs text-[var(--muted)]">Whisper GGML + Parakeet ONNX</p>
         </div>
         <div className="vani-card p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Acceleration</p>
-          <p className="mt-1.5 text-sm font-semibold text-[var(--emerald)]">Metal GPU + Neural Engine</p>
-          <p className="mt-0.5 text-xs text-[var(--muted)]">100% local on Apple Silicon</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+            {isMac ? "Acceleration" : "Inference Runtime"}
+          </p>
+          <p className="mt-1.5 text-sm font-semibold text-[var(--emerald)]">
+            {isMac ? "Metal GPU + Neural Engine" : "whisper-rs + ONNX Runtime"}
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">
+            {isMac ? "100% local on Apple Silicon" : `100% local on ${systemInfo?.osName || "Windows"}`}
+          </p>
         </div>
       </div>
 

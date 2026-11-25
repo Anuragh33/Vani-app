@@ -9,6 +9,13 @@ use crate::config::{HistoryEntry, Note, Settings, Store};
 use crate::models;
 use crate::transcribe::{self, SharedEngine};
 
+#[cfg(target_os = "macos")]
+pub type PlatformRecording = crate::apple_ai::ActiveNativeRecording;
+#[cfg(target_os = "windows")]
+pub type PlatformRecording = crate::win_audio::ActiveNativeRecording;
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub type PlatformRecording = ();
+
 pub struct AppState {
     pub store: Arc<Mutex<Store>>,
     pub engine: SharedEngine,
@@ -16,7 +23,36 @@ pub struct AppState {
     pub app_data_dir: PathBuf,
     pub dictation_active: Arc<Mutex<bool>>,
     pub frontmost_app: Arc<Mutex<Option<String>>>,
-    pub native_recording: Arc<Mutex<Option<apple_ai::ActiveNativeRecording>>>,
+    pub native_recording: Arc<Mutex<Option<PlatformRecording>>>,
+}
+
+#[tauri::command]
+pub async fn get_system_info(app: AppHandle) -> Result<serde_json::Value, String> {
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+    let is_mac = cfg!(target_os = "macos");
+    let is_windows = cfg!(target_os = "windows");
+    let apple_ai_supported = if is_mac {
+        let status = apple_ai::check_status(&app);
+        status.helper_found && (status.speech_analyzer_available || status.foundation_model_available)
+    } else {
+        false
+    };
+
+    Ok(serde_json::json!({
+        "os": os,
+        "arch": arch,
+        "isMac": is_mac,
+        "isWindows": is_windows,
+        "appleAiSupported": apple_ai_supported,
+        "pushToTalkKey": if is_mac { "⌥ Option" } else { "Right Alt" },
+        "modifierSymbol": if is_mac { "⌘" } else { "Ctrl+" },
+        "dashboardHotkey": if is_mac { "⌘⇧D" } else { "Ctrl+Shift+D" },
+        "dictateHotkey": if is_mac { "⌘⇧Space" } else { "Ctrl+Shift+Space" },
+        "osName": if is_mac { "macOS" } else if is_windows { "Windows" } else { "Linux" },
+        "fileManagerName": if is_mac { "Finder" } else if is_windows { "Explorer" } else { "Files" },
+        "gpuBackend": if is_mac { "Metal GPU + Neural Engine" } else { "CPU + ONNX Runtime" }
+    }))
 }
 
 fn now_iso() -> String {
@@ -95,19 +131,44 @@ pub async fn start_native_recording(
     // Cancel any leftover recorder first
     if let Ok(mut guard) = state.native_recording.lock() {
         if let Some(prev) = guard.take() {
+            #[cfg(target_os = "macos")]
             apple_ai::cancel_native_recording(prev);
+            #[cfg(target_os = "windows")]
+            crate::win_audio::cancel_native_recording(prev);
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            let _ = prev;
         }
     }
 
-    let app_clone = app.clone();
-    let rec = tokio::task::spawn_blocking(move || apple_ai::start_native_recording(&app_clone))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        let app_clone = app.clone();
+        let rec = tokio::task::spawn_blocking(move || apple_ai::start_native_recording(&app_clone))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+        let mut guard = state.native_recording.lock().map_err(|e| e.to_string())?;
+        *guard = Some(rec);
+        return Ok(serde_json::json!({ "ok": true }));
+    }
 
-    let mut guard = state.native_recording.lock().map_err(|e| e.to_string())?;
-    *guard = Some(rec);
-    Ok(serde_json::json!({ "ok": true }))
+    #[cfg(target_os = "windows")]
+    {
+        let app_clone = app.clone();
+        let rec = tokio::task::spawn_blocking(move || crate::win_audio::start_native_recording(&app_clone))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+        let mut guard = state.native_recording.lock().map_err(|e| e.to_string())?;
+        *guard = Some(rec);
+        return Ok(serde_json::json!({ "ok": true }));
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = (state, app);
+        Err("Native recording is not supported on this platform".into())
+    }
 }
 
 #[tauri::command]
@@ -122,12 +183,27 @@ pub async fn stop_native_recording(
         return Ok(serde_json::json!({ "ok": false, "error": "No active recording." }));
     };
 
+    #[cfg(target_os = "macos")]
     let (wav_path, samples, peak) =
         tokio::task::spawn_blocking(move || apple_ai::stop_native_recording(rec))
             .await
             .map_err(|e| e.to_string())?
             .map_err(|e| e.to_string())?;
 
+    #[cfg(target_os = "windows")]
+    let (wav_path, samples, peak) =
+        tokio::task::spawn_blocking(move || crate::win_audio::stop_native_recording(rec))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = rec;
+        return Err("Native recording is not supported on this platform".into());
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     Ok(serde_json::json!({
         "ok": true,
         "wavPath": wav_path.to_string_lossy(),
@@ -143,9 +219,16 @@ pub async fn cancel_native_recording(state: State<'_, AppState>) -> Result<(), S
         guard.take()
     };
     if let Some(rec) = rec {
+        #[cfg(target_os = "macos")]
         tokio::task::spawn_blocking(move || apple_ai::cancel_native_recording(rec))
             .await
             .ok();
+        #[cfg(target_os = "windows")]
+        tokio::task::spawn_blocking(move || crate::win_audio::cancel_native_recording(rec))
+            .await
+            .ok();
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        let _ = rec;
     }
     Ok(())
 }
@@ -171,9 +254,14 @@ pub async fn dictation_complete(
     };
 
     if wav_buffer.len() <= 44 {
+        let hint = if cfg!(target_os = "macos") {
+            "No audio captured. Check System Settings → Privacy & Security → Microphone for VANI."
+        } else {
+            "No audio captured. Check Windows Settings → Privacy & security → Microphone for VANI."
+        };
         return Ok(serde_json::json!({
             "ok": false,
-            "error": "No audio captured. Check System Settings → Privacy & Security → Microphone for VANI."
+            "error": hint
         }));
     }
 
@@ -194,7 +282,7 @@ pub async fn dictation_complete(
                 .await
                 .map_err(|e| e.to_string())?;
             (text, false, "openai:whisper-1".to_string())
-        } else if settings.transcription_provider == "apple" {
+        } else if cfg!(target_os = "macos") && settings.transcription_provider == "apple" {
             match apple_ai::transcribe_wav_on_device(
                 &app,
                 &wav_buffer,
@@ -235,9 +323,14 @@ pub async fn dictation_complete(
             // Open-source local: whisper-rs (Metal GPU) or Parakeet ONNX
             let model_path = models::model_path(&state.app_data_dir, &settings.whisper_model);
             if !models::model_installed(&state.app_data_dir, &settings.whisper_model) {
+                let err_msg = if cfg!(target_os = "macos") {
+                    format!("Model {} is not downloaded. Open Speech Models and download it, or switch to Apple On-Device Speech.", settings.whisper_model)
+                } else {
+                    format!("Model {} is not downloaded yet. Open Speech Models and download a local model to start dictating.", settings.whisper_model)
+                };
                 return Ok(serde_json::json!({
                     "ok": false,
-                    "error": format!("Model {} is not downloaded. Open Speech Models and download it, or switch to Apple On-Device Speech.", settings.whisper_model)
+                    "error": err_msg
                 }));
             }
 
@@ -262,8 +355,10 @@ pub async fn dictation_complete(
                 Ok(text) => {
                     let prefix = if models::is_parakeet(&settings.whisper_model) {
                         "parakeet-onnx"
-                    } else {
+                    } else if cfg!(target_os = "macos") {
                         "whisper-rs-metal"
+                    } else {
+                        "whisper-rs"
                     };
                     let label = format!("{}:{}", prefix, settings.whisper_model);
                     (text, false, label)
@@ -305,7 +400,7 @@ pub async fn dictation_complete(
     // 4. AI cleanup: Apple Foundation Models runs 100% on-device (allowed even in Privacy Shield mode!)
     let ctx = settings.cleanup_context.as_str();
     let mut cleanup_used = "local-rules";
-    if settings.cleanup_provider == "apple" {
+    if cfg!(target_os = "macos") && settings.cleanup_provider == "apple" {
         if let Ok(out) = apple_ai::polish_on_device(&app, &cleaned, ctx).await {
             cleaned = out;
             cleanup_used = "apple-foundation-model";
@@ -480,7 +575,7 @@ pub async fn whisper_status(state: State<'_, AppState>) -> Result<serde_json::Va
     let model_path = models::model_path(&state.app_data_dir, model_id);
     Ok(serde_json::json!({
         "binaryFound": true,
-        "binary": "built-in (whisper-rs Metal + ONNX)",
+        "binary": if cfg!(target_os = "macos") { "built-in (whisper-rs Metal + ONNX)" } else { "built-in (whisper-rs + ONNX)" },
         "model": model_id,
         "modelInstalled": installed,
         "modelPath": model_path.to_string_lossy(),
@@ -564,8 +659,11 @@ pub async fn check_permissions(app: AppHandle) -> Result<serde_json::Value, Stri
             "accessibility": acc
         }));
     }
-    #[allow(unreachable_code)]
-    Ok(serde_json::json!({ "microphone": "unknown", "accessibility": true }))
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Ok(serde_json::json!({ "microphone": "granted", "accessibility": true }))
+    }
 }
 
 #[tauri::command]
@@ -583,6 +681,11 @@ pub async fn open_mic_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     std::process::Command::new("open")
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+        .spawn()
+        .ok();
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "ms-settings:privacy-microphone"])
         .spawn()
         .ok();
     Ok(())
@@ -691,7 +794,9 @@ pub async fn export_note(note: crate::config::Note) -> Result<serde_json::Value,
     // and invoke open via shell as a workaround if dialog isn't available.
     // In Tauri v2, we access the dialog plugin via the app handle in commands.
     // Because this command doesn't receive an AppHandle, we write to Downloads.
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".into());
     let dest = std::path::PathBuf::from(&home).join("Downloads").join(&filename);
     std::fs::write(&dest, &md).map_err(|e| e.to_string())?;
     Ok(serde_json::json!({ "ok": true, "path": dest.to_string_lossy() }))

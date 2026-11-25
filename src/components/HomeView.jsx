@@ -42,8 +42,10 @@ function formatTimer(ms) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${tenths}`;
 }
 
-function FloatingPillSandbox({ settings, onOpenHudStudio }) {
+function FloatingPillSandbox({ settings, systemInfo, onOpenHudStudio }) {
   const [previewPhase, setPreviewPhase] = useState("recording");
+  const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
+  const pushToTalkKey = systemInfo?.pushToTalkKey || (isMac ? "⌥ Option" : "Right Alt");
 
   return (
     <div className="vani-card flex h-full flex-col gap-4 p-5">
@@ -54,13 +56,13 @@ function FloatingPillSandbox({ settings, onOpenHudStudio }) {
             <h3 className="text-sm font-semibold text-[var(--text)]">Floating HUD Preview</h3>
           </div>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            Live pill triggered by holding <kbd className="vani-kbd">⌥ Option</kbd>.{" "}
+            Live pill triggered by holding <kbd className="vani-kbd">{pushToTalkKey}</kbd>.{" "}
             <button
               type="button"
               onClick={onOpenHudStudio}
               className="font-medium text-[var(--brand)] hover:underline"
             >
-              Customize HUD &amp; Menu Bar →
+              {isMac ? "Customize HUD & Menu Bar →" : "Customize HUD & System Tray →"}
             </button>
           </p>
         </div>
@@ -116,6 +118,7 @@ function FloatingPillSandbox({ settings, onOpenHudStudio }) {
 
 export default function HomeView({
   settings,
+  systemInfo,
   onSaveSettings,
   permissions,
   whisperStatus,
@@ -126,6 +129,11 @@ export default function HomeView({
   onSaveAsNote,
   onNotify,
 }) {
+  const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
+  const osName = systemInfo?.osName || (isMac ? "macOS" : "Windows");
+  const pushToTalkKey = systemInfo?.pushToTalkKey || (isMac ? "⌥ Option" : "Right Alt");
+  const usingAppleStt = isMac && settings.transcriptionProvider === "apple";
+  const usingApplePolish = isMac && settings.cleanupProvider === "apple";
   const [phase, setPhase] = useState("idle"); // idle | recording | processing | done | error
   const [result, setResult] = useState(null);
   const [showRaw, setShowRaw] = useState(false);
@@ -241,7 +249,7 @@ export default function HomeView({
             <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">VANI Studio</h1>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-                settings.transcriptionProvider === "apple" ||
+                usingAppleStt ||
                 whisperStatus?.modelInstalled ||
                 settings.transcriptionProvider === "openai"
                   ? "bg-[var(--emerald-soft)] text-[var(--emerald)]"
@@ -249,7 +257,7 @@ export default function HomeView({
               }`}
             >
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
-              {settings.transcriptionProvider === "apple"
+              {usingAppleStt
                 ? "Ready · Apple SpeechAnalyzer"
                 : settings.transcriptionProvider === "openai"
                 ? "Cloud Whisper"
@@ -259,7 +267,7 @@ export default function HomeView({
             </span>
           </div>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Hold <kbd className="vani-kbd">⌥ Option</kbd> anywhere on macOS to speak and paste, or test live right here.
+            Hold <kbd className="vani-kbd">{pushToTalkKey}</kbd> anywhere on {osName} to speak and paste, or test live right here.
           </p>
         </div>
 
@@ -292,8 +300,8 @@ export default function HomeView({
         </div>
       </div>
 
-      {/* Accessibility permission warning so ⌥ Option Floating HUD & auto-paste work */}
-      {!permissions.accessibility && (
+      {/* Accessibility permission warning — macOS ONLY */}
+      {isMac && !permissions.accessibility && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/35 bg-[var(--amber-soft)] px-4 py-3">
           <div className="flex items-center gap-2.5 text-sm text-[var(--amber)]">
             <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -315,7 +323,7 @@ export default function HomeView({
       )}
 
       {/* Warning banner if local open-source model missing */}
-      {settings.transcriptionProvider === "local" && !whisperStatus?.modelInstalled && (
+      {!usingAppleStt && settings.transcriptionProvider !== "openai" && !whisperStatus?.modelInstalled && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/35 bg-[var(--amber-soft)] px-4 py-3">
           <div className="flex items-center gap-2.5 text-sm text-[var(--amber)]">
             <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -450,11 +458,13 @@ export default function HomeView({
           {/* Pipeline chips */}
           <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1 text-[11px] text-[var(--muted)]">
             <span className="rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-0.5">
-              {settings.transcriptionProvider === "apple"
+              {usingAppleStt
                 ? "Apple SpeechAnalyzer"
                 : settings.transcriptionProvider === "openai"
                 ? "OpenAI Whisper"
-                : `Metal · ${settings.whisperModel}`}
+                : isMac
+                ? `Metal · ${settings.whisperModel}`
+                : `Local · ${settings.whisperModel}`}
             </span>
             <ArrowRight className="h-3 w-3 opacity-50" />
             <span
@@ -473,15 +483,15 @@ export default function HomeView({
             <ArrowRight className="h-3 w-3 opacity-50" />
             <span
               className={`rounded-md border px-2 py-0.5 ${
-                settings.cleanupProvider === "apple" && appleAi?.foundationModelAvailable
+                usingApplePolish && appleAi?.foundationModelAvailable
                   ? "border-[var(--violet)]/35 bg-[var(--violet-soft)] text-[var(--violet)]"
                   : "border-[var(--border)] bg-[var(--bg-surface)]"
               }`}
             >
               Polish:{" "}
-              {settings.cleanupProvider === "apple"
+              {usingApplePolish
                 ? "Apple Foundation Model"
-                : settings.cleanupProvider === "none"
+                : !settings.cleanupProvider || settings.cleanupProvider === "none" || (!isMac && settings.cleanupProvider === "apple")
                 ? "Local Rules"
                 : settings.cleanupProvider}
             </span>
@@ -572,7 +582,10 @@ export default function HomeView({
           {
             label: "Active Mode",
             value: (settings.cleanupContext || "general").replace(/^\w/, (c) => c.toUpperCase()),
-            sub: settings.cleanupProvider === "none" ? "Local pipeline" : `${settings.cleanupProvider} cleanup`,
+            sub:
+              !settings.cleanupProvider || settings.cleanupProvider === "none" || (!isMac && settings.cleanupProvider === "apple")
+                ? "Local pipeline"
+                : `${settings.cleanupProvider} cleanup`,
             icon: Sliders,
             accent: "text-[var(--violet)]",
           },
@@ -600,7 +613,7 @@ export default function HomeView({
 
       {/* Bottom Grid: Floating HUD Sandbox + Recent Transcriptions */}
       <div className="grid items-stretch gap-4 lg:grid-cols-2">
-        <FloatingPillSandbox settings={settings} onOpenHudStudio={() => onNavigate("hud")} />
+        <FloatingPillSandbox settings={settings} systemInfo={systemInfo} onOpenHudStudio={() => onNavigate("hud")} />
 
         <div className="vani-card flex h-full flex-col gap-3 p-5">
           <div className="flex items-center justify-between">
@@ -617,7 +630,9 @@ export default function HomeView({
           {recent.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] py-6 text-center">
               <p className="text-xs text-[var(--muted)]">No dictations recorded yet.</p>
-              <p className="mt-1 text-[11px] text-[var(--muted-strong)]">Hold ⌥ Option anywhere or use the playground above.</p>
+              <p className="mt-1 text-[11px] text-[var(--muted-strong)]">
+                Hold {pushToTalkKey} anywhere or use the playground above.
+              </p>
             </div>
           ) : (
             <div className="space-y-2">

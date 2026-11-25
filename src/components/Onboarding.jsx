@@ -37,19 +37,21 @@ function StepDots({ current }) {
   );
 }
 
-function WelcomeStep({ onNext }) {
+function WelcomeStep({ systemInfo, onNext }) {
+  const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
+  const pushToTalkKey = systemInfo?.pushToTalkKey || (isMac ? "⌥ Option" : "Right Alt");
   return (
     <div className="flex flex-col items-center text-center space-y-6">
       <VaniLogo size={60} />
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Welcome to VANI</h1>
         <p className="mt-2 max-w-md text-sm text-[var(--muted)]">
-          Hold <kbd className="vani-kbd">⌥ Option</kbd>, speak naturally, and your polished words appear at your cursor — powered by on-device speech recognition.
+          Hold <kbd className="vani-kbd">{pushToTalkKey}</kbd>, speak naturally, and your polished words appear at your cursor — powered by on-device speech recognition.
         </p>
       </div>
       <div className="grid w-full grid-cols-3 gap-3 text-left">
         {[
-          { icon: Shield, title: "Private by design", desc: "Audio stays on your Mac." },
+          { icon: Shield, title: "Private by design", desc: isMac ? "Audio stays on your Mac." : "Audio stays on your PC." },
           { icon: Sparkles, title: "Works everywhere", desc: "Slack, Mail, IDE, Docs." },
           { icon: WifiOff, title: "100% offline ready", desc: "Built-in whisper-rs engine." },
         ].map(({ icon: Icon, title, desc }) => (
@@ -67,9 +69,10 @@ function WelcomeStep({ onNext }) {
   );
 }
 
-function PermissionsStep({ onNext }) {
+function PermissionsStep({ systemInfo, onNext }) {
+  const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
   const [micStatus, setMicStatus] = useState("unknown");
-  const [accOk, setAccOk] = useState(false);
+  const [accOk, setAccOk] = useState(!isMac);
   const [requesting, setRequesting] = useState(false);
 
   useEffect(() => {
@@ -106,7 +109,11 @@ function PermissionsStep({ onNext }) {
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold text-[var(--text)]">System Permissions</h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">VANI needs two macOS permissions to listen and paste text.</p>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          {isMac
+            ? "VANI needs two macOS permissions to listen and paste text."
+            : "Allow microphone access so VANI can transcribe your voice locally."}
+        </p>
       </div>
 
       <div className="space-y-3">
@@ -120,7 +127,9 @@ function PermissionsStep({ onNext }) {
               <p className="text-xs text-[var(--muted)]">Captures your voice locally for transcription.</p>
               {micStatus === "denied" && (
                 <p className="mt-1 text-[11px] text-[var(--amber)]">
-                  System Settings → Privacy &amp; Security → Microphone → enable VANI.
+                  {isMac
+                    ? "System Settings → Privacy & Security → Microphone → enable VANI."
+                    : "Windows Settings → Privacy & security → Microphone → allow desktop apps."}
                 </p>
               )}
             </div>
@@ -141,25 +150,27 @@ function PermissionsStep({ onNext }) {
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
-          <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--violet-soft)] text-[var(--violet)]">
-              <Accessibility className="h-4 w-4" />
+        {isMac && (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--violet-soft)] text-[var(--violet)]">
+                <Accessibility className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[var(--text)]">Accessibility</p>
+                <p className="text-xs text-[var(--muted)]">Types transcribed text seamlessly into your active app.</p>
+                {!accOk && (
+                  <p className="mt-1 text-[11px] text-[var(--amber)]">
+                    System Settings → Privacy &amp; Security → Accessibility → enable VANI.
+                  </p>
+                )}
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-[var(--text)]">Accessibility</p>
-              <p className="text-xs text-[var(--muted)]">Types transcribed text seamlessly into your active app.</p>
-              {!accOk && (
-                <p className="mt-1 text-[11px] text-[var(--amber)]">
-                  System Settings → Privacy &amp; Security → Accessibility → enable VANI.
-                </p>
-              )}
-            </div>
+            <span className={`text-xs font-semibold ${accOk ? "text-[var(--emerald)]" : "text-[var(--amber)]"}`}>
+              {accOk ? "Granted" : "Needed"}
+            </span>
           </div>
-          <span className={`text-xs font-semibold ${accOk ? "text-[var(--emerald)]" : "text-[var(--amber)]"}`}>
-            {accOk ? "Granted" : "Needed"}
-          </span>
-        </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between gap-3 pt-2">
@@ -344,7 +355,10 @@ function ApiKeysStep({ onNext, onSaveKeys }) {
   );
 }
 
-function HotkeyStep({ onNext }) {
+function HotkeyStep({ systemInfo, onNext }) {
+  const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
+  const pushToTalkKey = systemInfo?.pushToTalkKey || (isMac ? "⌥ Option" : "Right Alt");
+  const dashboardHotkey = systemInfo?.dashboardHotkey || (isMac ? "⌘ ⇧ D" : "Ctrl + Shift + D");
   return (
     <div className="space-y-5">
       <div className="flex items-start gap-3">
@@ -361,7 +375,7 @@ function HotkeyStep({ onNext }) {
 
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-app)] px-6 py-8">
         <kbd className="vani-kbd px-5 py-2.5 font-mono text-base font-semibold text-[var(--brand)]">
-          ⌥ Option
+          {pushToTalkKey}
         </kbd>
         <p className="text-xs text-[var(--muted)]">
           Hold to speak · Release to transcribe &amp; paste right at your cursor
@@ -370,7 +384,7 @@ function HotkeyStep({ onNext }) {
 
       <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-xs">
         <span className="text-[var(--muted)]">Toggle VANI Studio anytime</span>
-        <kbd className="vani-kbd font-mono">⌘ ⇧ D</kbd>
+        <kbd className="vani-kbd font-mono">{dashboardHotkey}</kbd>
       </div>
 
       <button type="button" onClick={onNext} className="vani-btn-primary w-full rounded-xl py-2.5 text-sm font-semibold">
@@ -380,7 +394,9 @@ function HotkeyStep({ onNext }) {
   );
 }
 
-function DoneStep({ onFinish }) {
+function DoneStep({ systemInfo, onFinish }) {
+  const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
+  const pushToTalkKey = systemInfo?.pushToTalkKey || (isMac ? "⌥ Option" : "Right Alt");
   return (
     <div className="flex flex-col items-center text-center space-y-5 py-2">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--emerald-soft)] text-[var(--emerald)]">
@@ -389,7 +405,7 @@ function DoneStep({ onFinish }) {
       <div>
         <h2 className="text-2xl font-bold text-[var(--text)]">You’re all set</h2>
         <p className="mt-2 max-w-sm text-sm text-[var(--muted)]">
-          Click any text field on your Mac, hold <kbd className="vani-kbd">⌥ Option</kbd>, and start speaking.
+          Click any text field on your {isMac ? "Mac" : "PC"}, hold <kbd className="vani-kbd">{pushToTalkKey}</kbd>, and start speaking.
         </p>
       </div>
       <button type="button" onClick={onFinish} className="vani-btn-primary rounded-xl px-6 py-2.5 text-sm font-semibold">
@@ -399,7 +415,7 @@ function DoneStep({ onFinish }) {
   );
 }
 
-export default function Onboarding({ onComplete, onSaveKeys, whisperStatus, models, downloads, onDownloadModel }) {
+export default function Onboarding({ systemInfo, onComplete, onSaveKeys, whisperStatus, models, downloads, onDownloadModel }) {
   const [step, setStep] = useState("welcome");
 
   const next = () => {
@@ -417,8 +433,8 @@ export default function Onboarding({ onComplete, onSaveKeys, whisperStatus, mode
       <div className="animate-scale-in flex w-full max-w-[540px] flex-col gap-6 rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-surface)] p-7 shadow-[var(--shadow-modal)]">
         <StepDots current={step} />
 
-        {step === "welcome" && <WelcomeStep onNext={next} />}
-        {step === "permissions" && <PermissionsStep onNext={next} />}
+        {step === "welcome" && <WelcomeStep systemInfo={systemInfo} onNext={next} />}
+        {step === "permissions" && <PermissionsStep systemInfo={systemInfo} onNext={next} />}
         {step === "setup" && (
           <SetupStep
             onNext={next}
@@ -429,8 +445,8 @@ export default function Onboarding({ onComplete, onSaveKeys, whisperStatus, mode
           />
         )}
         {step === "apikeys" && <ApiKeysStep onNext={next} onSaveKeys={onSaveKeys} />}
-        {step === "hotkey" && <HotkeyStep onNext={next} />}
-        {step === "done" && <DoneStep onFinish={finish} />}
+        {step === "hotkey" && <HotkeyStep systemInfo={systemInfo} onNext={next} />}
+        {step === "done" && <DoneStep systemInfo={systemInfo} onFinish={finish} />}
       </div>
     </div>
   );

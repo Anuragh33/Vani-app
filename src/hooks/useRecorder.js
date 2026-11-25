@@ -73,12 +73,12 @@ function encodeWav(samples, sampleRate) {
   return buffer;
 }
 
-function canUseNativeMacRecorder() {
+function canUseNativeRecorder() {
   return (
     typeof window !== "undefined" &&
     window.vani &&
     !window.vani.isPreview &&
-    window.vani.platform === "darwin" &&
+    (window.vani.platform === "darwin" || window.vani.platform === "win32") &&
     typeof window.vani.startNativeRecording === "function"
   );
 }
@@ -172,7 +172,11 @@ function useRecorder({
         return;
       }
       if (!res.samples || res.samples < 800 || (typeof res.peak === "number" && res.peak < 0.0004)) {
-        onError?.("No speech detected from microphone. Check macOS Privacy & Security → Microphone and your input device.");
+        const osHint =
+          window.vani?.platform === "darwin"
+            ? "macOS Privacy & Security → Microphone"
+            : "Windows Settings → Privacy & security → Microphone";
+        onError?.(`No speech detected from microphone. Check ${osHint} and your input device.`);
         return;
       }
       await onRecordingComplete?.({ wavPath: res.wavPath });
@@ -196,8 +200,8 @@ function useRecorder({
     stopRequestedRef.current = false;
     silenceStartedAtRef.current = null;
 
-    // Prefer native macOS CoreAudio (AVAudioEngine) inside Tauri — avoids WKWebView getUserMedia silence bugs
-    if (canUseNativeMacRecorder()) {
+    // Prefer native Rust/OS audio recorder (AVAudioEngine on macOS, WASAPI on Windows) inside Tauri
+    if (canUseNativeRecorder()) {
       try {
         usingNativeRef.current = true;
         unsubLevelRef.current = window.vani.onNativeAudioLevel?.((lvl) => {

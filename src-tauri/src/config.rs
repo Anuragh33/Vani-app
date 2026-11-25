@@ -73,8 +73,27 @@ fn default_silence_ms() -> u32 { 2000 }
 fn default_model() -> String { "ggml-base.en".into() }
 fn default_threads() -> u32 { (num_cpus().saturating_sub(1)).clamp(2, 8) }
 fn default_theme() -> String { "dark".into() }
-fn default_transcription_provider() -> String { "apple".into() }
-fn default_cleanup_provider() -> String { "apple".into() }
+fn default_transcription_provider() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        "apple".into()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "local".into()
+    }
+}
+
+fn default_cleanup_provider() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        "apple".into()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "none".into()
+    }
+}
 fn default_general() -> String { "general".into() }
 fn default_hud_style() -> String { "breathwave".into() }
 fn default_hud_position() -> String { "top-center".into() }
@@ -132,12 +151,25 @@ pub struct Store {
 impl Store {
     pub fn load(app_data_dir: PathBuf) -> Result<Self> {
         let path = app_data_dir.join("vani-data.json");
-        let data = if path.exists() {
+        let mut data: AppData = if path.exists() {
             let raw = std::fs::read_to_string(&path)?;
             serde_json::from_str(&raw).unwrap_or_default()
         } else {
             AppData::default()
         };
+
+        // On non-macOS systems, Apple on-device providers are unavailable — ensure
+        // settings fall back seamlessly to open-source local Whisper / local rules.
+        #[cfg(not(target_os = "macos"))]
+        {
+            if data.settings.transcription_provider == "apple" {
+                data.settings.transcription_provider = "local".into();
+            }
+            if data.settings.cleanup_provider == "apple" {
+                data.settings.cleanup_provider = "none".into();
+            }
+        }
+
         Ok(Self { path, data })
     }
 

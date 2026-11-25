@@ -131,7 +131,13 @@ function MenuBarTrayIcon({ style = "monochrome", phase = "idle", isLightBar = fa
   );
 }
 
-export default function HudStudioView({ settings, onSaveSettings, onNavigate, onNotify }) {
+export default function HudStudioView({ settings, systemInfo, onSaveSettings, onNavigate, onNotify }) {
+  const isMac = systemInfo ? Boolean(systemInfo.isMac) : true;
+  const osName = systemInfo?.osName || (isMac ? "macOS" : "Windows");
+  const pushToTalkKey = systemInfo?.pushToTalkKey || (isMac ? "⌥ Option" : "Right Alt");
+  const dashboardHotkey = systemInfo?.dashboardHotkey || (isMac ? "⌘⇧D" : "Ctrl+Shift+D");
+  const mod = systemInfo?.modifierSymbol || (isMac ? "⌘" : "Ctrl+");
+
   const [wallpaperId, setWallpaperId] = useState("obsidian");
   const [phase, setPhase] = useState("recording"); // idle | recording | processing | done | error
   const [trayOpen, setTrayOpen] = useState(false);
@@ -140,7 +146,23 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
   const [cycling, setCycling] = useState(false);
   const timersRef = useRef([]);
 
-  const wallpaper = WALLPAPERS.find((w) => w.id === wallpaperId) || WALLPAPERS[0];
+  const wallpapers = WALLPAPERS.map((wp) => ({
+    ...wp,
+    label: isMac
+      ? wp.label
+      : wp.id === "obsidian"
+      ? "Windows Dark"
+      : wp.id === "sequoia"
+      ? "Bloom Dusk"
+      : "Windows Light",
+  }));
+  const trayStyles = TRAY_STYLES.map((item) =>
+    item.id === "monochrome" && !isMac
+      ? { ...item, label: "Crisp White", desc: "High-contrast white Windows taskbar bars" }
+      : item
+  );
+
+  const wallpaper = wallpapers.find((w) => w.id === wallpaperId) || wallpapers[0];
   const hudStyle = settings.hudStyle || "breathwave";
   const hudPosition = settings.hudPosition || "top-center";
   const hudShowTimer = settings.hudShowTimer !== false;
@@ -178,12 +200,20 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
 
   const hudPositionClass =
     hudPosition === "top-left"
-      ? "top-11 left-5"
+      ? isMac
+        ? "top-11 left-5"
+        : "top-5 left-5"
       : hudPosition === "bottom-center"
-      ? "bottom-6 left-1/2 -translate-x-1/2"
+      ? isMac
+        ? "bottom-6 left-1/2 -translate-x-1/2"
+        : "bottom-14 left-1/2 -translate-x-1/2"
       : hudPosition === "top-right"
-      ? "top-11 right-5"
-      : "top-11 left-1/2 -translate-x-1/2";
+      ? isMac
+        ? "top-11 right-5"
+        : "top-5 right-5"
+      : isMac
+      ? "top-11 left-1/2 -translate-x-1/2"
+      : "top-5 left-1/2 -translate-x-1/2";
 
   const showTop = phase === "recording" || phase === "processing";
   const showBottom = phase === "error";
@@ -193,9 +223,13 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Floating HUD &amp; Menu Bar</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">
+            {isMac ? "Floating HUD & Menu Bar" : "Floating HUD & System Tray"}
+          </h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Preview and customize VANI’s always-on-top dictation pill and macOS menu bar presence in real time.
+            {isMac
+              ? "Preview and customize VANI’s always-on-top dictation pill and macOS menu bar presence in real time."
+              : "Preview and customize VANI’s always-on-top dictation pill and Windows taskbar tray presence in real time."}
           </p>
         </div>
 
@@ -207,7 +241,7 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
             className="vani-btn-primary inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold"
           >
             <Play className="h-3.5 w-3.5 fill-current" />
-            {cycling ? "Simulating ⌥ Option…" : "Run Full Dictation Cycle"}
+            {cycling ? `Simulating ${pushToTalkKey}…` : "Run Full Dictation Cycle"}
           </button>
 
           <a
@@ -260,7 +294,7 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
             <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] mr-1">
               Desktop
             </span>
-            {WALLPAPERS.map((wp) => (
+            {wallpapers.map((wp) => (
               <button
                 key={wp.id}
                 type="button"
@@ -282,55 +316,101 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
           className="relative h-[340px] w-full select-none overflow-hidden xl:h-[400px]"
           style={{ background: wallpaper.desktopBg }}
         >
-          {/* macOS Top Menu Bar */}
-          <div
-            className="relative z-20 flex h-7 w-full items-center justify-between px-3.5 text-[11px] font-medium backdrop-blur-xl"
-            style={{
-              background: wallpaper.barBg,
-              color: wallpaper.barText,
-              borderBottom: wallpaper.isLightBar
-                ? "1px solid rgba(0,0,0,0.08)"
-                : "1px solid rgba(255,255,255,0.08)",
-            }}
-          >
-            {/* Left macOS App Menu */}
-            <div className="flex items-center gap-3.5">
-              <span className="text-[13px] font-bold leading-none"></span>
-              <span className="font-semibold">Cursor</span>
-              <span className="opacity-70 hidden sm:inline">File</span>
-              <span className="opacity-70 hidden sm:inline">Edit</span>
-              <span className="opacity-70 hidden sm:inline">View</span>
-            </div>
+          {/* OS Top Menu Bar (macOS) OR Bottom Taskbar (Windows) */}
+          {isMac ? (
+            <div
+              className="relative z-20 flex h-7 w-full items-center justify-between px-3.5 text-[11px] font-medium backdrop-blur-xl"
+              style={{
+                background: wallpaper.barBg,
+                color: wallpaper.barText,
+                borderBottom: wallpaper.isLightBar
+                  ? "1px solid rgba(0,0,0,0.08)"
+                  : "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              {/* Left macOS App Menu */}
+              <div className="flex items-center gap-3.5">
+                <span className="text-[13px] font-bold leading-none"></span>
+                <span className="font-semibold">Cursor</span>
+                <span className="opacity-70 hidden sm:inline">File</span>
+                <span className="opacity-70 hidden sm:inline">Edit</span>
+                <span className="opacity-70 hidden sm:inline">View</span>
+              </div>
 
-            {/* Right macOS Status Icons + Clickable VANI Tray Icon */}
-            <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => setTrayOpen((v) => !v)}
-                className={`relative flex h-5 items-center gap-1.5 rounded px-2 transition ${
-                  trayOpen
-                    ? wallpaper.isLightBar
-                      ? "bg-black/10"
-                      : "bg-white/15"
-                    : wallpaper.isLightBar
-                    ? "hover:bg-black/10"
-                    : "hover:bg-white/10"
-                }`}
-                title="Click to preview VANI Menu Bar Popover"
-              >
-                <MenuBarTrayIcon style={trayIconStyle} phase={phase} isLightBar={wallpaper.isLightBar} />
-              </button>
-              <Wifi className="h-3.5 w-3.5 opacity-80" />
-              <BatteryMedium className="h-4 w-4 opacity-80" />
-              <SlidersHorizontal className="h-3 w-3 opacity-80" />
-              <span className="font-mono text-[11px] opacity-90">Tue 17:04</span>
+              {/* Right macOS Status Icons + Clickable VANI Tray Icon */}
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setTrayOpen((v) => !v)}
+                  className={`relative flex h-5 items-center gap-1.5 rounded px-2 transition ${
+                    trayOpen
+                      ? wallpaper.isLightBar
+                        ? "bg-black/10"
+                        : "bg-white/15"
+                      : wallpaper.isLightBar
+                      ? "hover:bg-black/10"
+                      : "hover:bg-white/10"
+                  }`}
+                  title="Click to preview VANI Menu Bar Popover"
+                >
+                  <MenuBarTrayIcon style={trayIconStyle} phase={phase} isLightBar={wallpaper.isLightBar} />
+                </button>
+                <Wifi className="h-3.5 w-3.5 opacity-80" />
+                <BatteryMedium className="h-4 w-4 opacity-80" />
+                <SlidersHorizontal className="h-3 w-3 opacity-80" />
+                <span className="font-mono text-[11px] opacity-90">Tue 17:04</span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div
+              className="absolute bottom-0 left-0 right-0 z-20 flex h-10 w-full items-center justify-between px-3.5 text-[11px] font-medium backdrop-blur-xl"
+              style={{
+                background: wallpaper.barBg,
+                color: wallpaper.barText,
+                borderTop: wallpaper.isLightBar
+                  ? "1px solid rgba(0,0,0,0.08)"
+                  : "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div className="flex items-center gap-2 opacity-75 text-[10px]">
+                <span className="font-semibold">Windows 11</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded bg-sky-500/20 text-sky-400 text-[10px] font-bold">
+                  ⊞
+                </span>
+                <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-medium">Cursor</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setTrayOpen((v) => !v)}
+                  className={`relative flex h-6 items-center gap-1.5 rounded px-2 transition ${
+                    trayOpen
+                      ? wallpaper.isLightBar
+                        ? "bg-black/10"
+                        : "bg-white/15"
+                      : wallpaper.isLightBar
+                      ? "hover:bg-black/10"
+                      : "hover:bg-white/10"
+                  }`}
+                  title="Click to preview VANI System Tray Menu"
+                >
+                  <MenuBarTrayIcon style={trayIconStyle} phase={phase} isLightBar={wallpaper.isLightBar} />
+                </button>
+                <Wifi className="h-3.5 w-3.5 opacity-80" />
+                <BatteryMedium className="h-4 w-4 opacity-80" />
+                <span className="font-mono text-[10.5px] opacity-90">17:04</span>
+              </div>
+            </div>
+          )}
 
-          {/* Clickable Menu Bar Tray Popover */}
+          {/* Clickable Menu Bar / System Tray Popover */}
           {trayOpen && (
             <div
-              className="animate-scale-in absolute right-14 top-8 z-30 w-60 overflow-hidden rounded-xl p-1.5 backdrop-blur-2xl"
+              className={`animate-scale-in absolute z-30 w-60 overflow-hidden rounded-xl p-1.5 backdrop-blur-2xl ${
+                isMac ? "right-14 top-8" : "right-10 bottom-12"
+              }`}
               style={{
                 background: wallpaper.isLightBar ? "rgba(255, 255, 255, 0.94)" : "rgba(18, 17, 26, 0.93)",
                 color: wallpaper.isLightBar ? "#18181b" : "#ffffff",
@@ -385,7 +465,9 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
                   <Mic className="h-3.5 w-3.5 text-pink-500" />
                   {phase === "recording" ? "Stop Dictation" : "Start Dictation"}
                 </span>
-                <span className={`font-mono text-[10px] ${wallpaper.isLightBar ? "text-zinc-400" : "text-white/50"}`}>⌥</span>
+                <span className={`font-mono text-[10px] ${wallpaper.isLightBar ? "text-zinc-400" : "text-white/50"}`}>
+                  {isMac ? "⌥" : "RAlt"}
+                </span>
               </button>
 
               {/* Quick Mode Pills inside Tray */}
@@ -434,7 +516,7 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
                   <LayoutDashboard className={`h-3.5 w-3.5 ${wallpaper.isLightBar ? "text-zinc-500" : "text-white/60"}`} />
                   Open VANI Studio
                 </span>
-                <span className={`font-mono text-[10px] ${wallpaper.isLightBar ? "text-zinc-400" : "text-white/45"}`}>⌘⇧D</span>
+                <span className={`font-mono text-[10px] ${wallpaper.isLightBar ? "text-zinc-400" : "text-white/45"}`}>{dashboardHotkey}</span>
               </button>
               <button
                 type="button"
@@ -447,7 +529,7 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
                   <Settings className={`h-3.5 w-3.5 ${wallpaper.isLightBar ? "text-zinc-500" : "text-white/60"}`} />
                   Settings…
                 </span>
-                <span className={`font-mono text-[10px] ${wallpaper.isLightBar ? "text-zinc-400" : "text-white/45"}`}>⌘,</span>
+                <span className={`font-mono text-[10px] ${wallpaper.isLightBar ? "text-zinc-400" : "text-white/45"}`}>{mod},</span>
               </button>
               <div className={`my-1 h-px ${wallpaper.isLightBar ? "bg-zinc-200" : "bg-white/10"}`} />
               <div className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs ${wallpaper.isLightBar ? "text-zinc-400" : "text-white/45"}`}>
@@ -455,23 +537,36 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
                   <Power className="h-3.5 w-3.5" />
                   Quit VANI
                 </span>
-                <span className="font-mono text-[10px]">⌘Q</span>
+                <span className="font-mono text-[10px]">{isMac ? "⌘Q" : "Alt+F4"}</span>
               </div>
             </div>
           )}
 
           {/* Subtle mocked background editor window to show translucency */}
           <div className="pointer-events-none mx-auto mt-14 w-[74%] max-w-[520px] rounded-2xl border border-white/10 bg-black/25 p-5 backdrop-blur-md">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
-              <span className="ml-2 font-mono text-[10px] text-white/45">release-notes.md — Cursor</span>
+            <div className="flex items-center justify-between gap-2">
+              {isMac ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+                  <span className="ml-2 font-mono text-[10px] text-white/45">release-notes.md — Cursor</span>
+                </div>
+              ) : (
+                <>
+                  <span className="font-mono text-[10px] text-white/55">release-notes.md — Cursor</span>
+                  <div className="flex items-center gap-2.5 font-mono text-[10px] text-white/45">
+                    <span>─</span>
+                    <span>□</span>
+                    <span>×</span>
+                  </div>
+                </>
+              )}
             </div>
             <div className="mt-4 space-y-2 font-mono text-xs text-white/75">
-              <p className="text-pink-300/80">## VANI v2.0 Highlights</p>
+              <p className="text-pink-300/80">## VANI v2.1 Highlights</p>
               <p>
-                Hold <span className="rounded bg-white/10 px-1 py-0.5 text-white">⌥ Option</span> to dictate anywhere
+                Hold <span className="rounded bg-white/10 px-1 py-0.5 text-white">{pushToTalkKey}</span> to dictate anywhere
                 with local whisper-rs...
                 {phase === "done" && (
                   <span className="ml-1 rounded bg-emerald-500/20 px-1 text-emerald-200">
@@ -509,27 +604,35 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
             )}
             {phase === "idle" && (
               <span className="rounded-full border border-white/15 bg-black/40 px-3 py-1 text-[11px] text-white/70 backdrop-blur-md">
-                HUD hidden until you hold ⌥ Option or click the menu bar icon
+                HUD hidden until you hold {pushToTalkKey} or click the {isMac ? "menu bar" : "system tray"} icon
               </span>
             )}
           </div>
 
-          {/* Interactive hint pill at bottom-left */}
-          <div className="absolute bottom-3 left-3.5 flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[10.5px] text-white/75 backdrop-blur-md">
+          {/* Interactive hint pill */}
+          <div
+            className={`absolute left-3.5 flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[10.5px] text-white/75 backdrop-blur-md ${
+              isMac ? "bottom-3" : "bottom-12"
+            }`}
+          >
             <Sparkles className="h-3 w-3 text-pink-400" />
-            <span>Click VANI’s waveform icon in the top bar to toggle the tray menu</span>
+            <span>
+              {isMac
+                ? "Click VANI’s waveform icon in the top bar to toggle the tray menu"
+                : "Click VANI’s waveform icon in the taskbar tray to toggle the menu"}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Bottom Configuration Grid: Floating HUD Customization + Menu Bar Icon Style */}
+      {/* Bottom Configuration Grid: Floating HUD Customization + Menu Bar / System Tray Icon Style */}
       <div className="grid gap-5 lg:grid-cols-12">
         {/* Floating HUD Controls */}
         <div className="vani-card p-5 lg:col-span-7 space-y-5">
           <div>
             <h2 className="text-sm font-semibold text-[var(--text)]">Floating HUD Appearance</h2>
             <p className="mt-0.5 text-xs text-[var(--muted)]">
-              Changes sync immediately to the live macOS overlay window.
+              Changes sync immediately to the live {osName} overlay window.
             </p>
           </div>
 
@@ -638,18 +741,22 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
           </div>
         </div>
 
-        {/* Menu Bar Icon Style Selector */}
+        {/* Menu Bar / System Tray Icon Style Selector */}
         <div className="vani-card p-5 lg:col-span-5 flex flex-col justify-between gap-4">
           <div className="space-y-4">
             <div>
-              <h2 className="text-sm font-semibold text-[var(--text)]">Menu Bar Icon Style</h2>
+              <h2 className="text-sm font-semibold text-[var(--text)]">
+                {isMac ? "Menu Bar Icon Style" : "System Tray Icon Style"}
+              </h2>
               <p className="mt-0.5 text-xs text-[var(--muted)]">
-                Choose how VANI appears in the macOS top menu bar alongside Wi-Fi and Control Center.
+                {isMac
+                  ? "Choose how VANI appears in the macOS top menu bar alongside Wi-Fi and Control Center."
+                  : "Choose how VANI appears in the Windows taskbar notification tray."}
               </p>
             </div>
 
             <div className="space-y-2.5">
-              {TRAY_STYLES.map((item) => {
+              {trayStyles.map((item) => {
                 const active = trayIconStyle === item.id;
                 return (
                   <button
@@ -657,7 +764,7 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
                     type="button"
                     onClick={() => {
                       onSaveSettings({ trayIconStyle: item.id });
-                      onNotify?.(`Menu bar icon preview: ${item.label}`);
+                      onNotify?.(`${isMac ? "Menu bar" : "System tray"} icon updated: ${item.label}`);
                     }}
                     className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition ${
                       active
@@ -684,7 +791,9 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-app)] p-3.5 text-xs text-[var(--muted)] flex items-start gap-2.5">
             <Shield className="h-4 w-4 shrink-0 text-[var(--emerald)] mt-0.5" />
             <span>
-              Left-clicking VANI’s macOS menu bar icon toggles the floating overlay instantly; right-clicking opens Dashboard, Settings, and Quit.
+              {isMac
+                ? "Left-clicking VANI’s macOS menu bar icon toggles the floating overlay instantly; right-clicking opens Dashboard, Settings, and Quit."
+                : "Left-clicking VANI’s Windows taskbar tray icon toggles the floating overlay instantly; right-clicking opens Studio, Settings, and Quit."}
             </span>
           </div>
         </div>

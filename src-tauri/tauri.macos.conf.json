@@ -1,0 +1,10 @@
+{
+  "app": {
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "resources": [
+      "bin/vani-apple-ai"
+    ]
+  }
+}
