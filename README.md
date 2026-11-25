@@ -1,163 +1,122 @@
 <p align="center">
-  <img src=".github/assets/banner.png" alt="Vani" width="100%" />
+  <img src="https://raw.githubusercontent.com/Anuragh33/Vani/main/banner.png" alt="VANI — Hybrid On-Device Voice Dictation for macOS" width="100%" />
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/macOS-26%2B-purple?style=flat-square&logo=apple&logoColor=white" />
-  <img src="https://img.shields.io/badge/Swift-6.0-orange?style=flat-square&logo=swift&logoColor=white" />
-  <img src="https://img.shields.io/badge/Apple%20Silicon-M--series-black?style=flat-square&logo=apple&logoColor=white" />
-  <img src="https://img.shields.io/github/v/release/Anuragh33/Vani?style=flat-square&color=e8326e&label=release" />
-  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" />
+  <img src="https://img.shields.io/badge/macOS-11%2B%20%7C%20Apple%20Silicon-09090b?style=flat-square&logo=apple&logoColor=white" />
+  <img src="https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white" />
+  <img src="https://img.shields.io/badge/Rust%20%2B%20Swift%206-Hybrid%20AI-f472b6?style=flat-square" />
+  <img src="https://img.shields.io/github/v/release/Anuragh33/Vani-app?style=flat-square&color=ec4899&label=release" />
+  <img src="https://img.shields.io/badge/license-MIT-34d399?style=flat-square" />
 </p>
 
 <p align="center">
-  <strong>Hold Fn. Speak. Done.</strong><br/>
-  On-device voice dictation for macOS — no servers, no API keys, no subscriptions.
+  <strong>Hold ⌥ Option. Speak. Done.</strong><br/>
+  Hybrid on-device macOS voice dictation studio combining Apple’s built-in <code>FoundationModels</code> + <code>SpeechAnalyzer</code> with GPU-accelerated open-source <code>whisper-rs</code> (Metal) &amp; NVIDIA Parakeet ONNX.
 </p>
 
 <p align="center">
-  <a href="https://github.com/Anuragh33/Vani/releases/latest">
-    <img src="https://img.shields.io/badge/Download-Vani%200.1.2-5c2d91?style=for-the-badge&logo=apple&logoColor=white" />
+  <a href="https://github.com/Anuragh33/Vani-app/releases/download/v2.1.0/VANI-2.1.0.dmg">
+    <img src="https://img.shields.io/badge/Download-VANI%202.1.0%20(.dmg)-ec4899?style=for-the-badge&logo=apple&logoColor=white" />
+  </a>
+  &nbsp;
+  <a href="https://github.com/Anuragh33/Vani">
+    <img src="https://img.shields.io/badge/Website%20Repo-Anuragh33%2FVani-18181b?style=for-the-badge&logo=github&logoColor=white" />
   </a>
 </p>
 
 ---
 
-## How it works
+## Why VANI 2.1?
 
-Hold **Fn** anywhere on your Mac. Speak naturally. Release. Polished text appears instantly in whatever app is focused — Terminal, Chrome, Slack, Xcode, anywhere.
+Most macOS dictation tools force you to choose between cloud subscriptions, heavy model downloads, or no AI cleanup. **VANI 2.1** gives you **both** in one local-first app:
 
-```
-Hold Fn  →  mic records  →  SpeechAnalyzer transcribes  →  Foundation Models polishes  →  text injected
-```
-
-Every step runs entirely on your Mac using Apple's frameworks introduced in macOS 26.
+1. **Apple On-Device AI (Zero Downloads, Zero API Keys)** — Uses macOS 26+ **`SpeechAnalyzer`** for instant Neural Engine speech-to-text and **`FoundationModels`** (`SystemLanguageModel`) for true on-device grammar, filler-word, and mode formatting (`General`, `Email`, `Slack`, `Notes`, `Code`).
+2. **Open-Source Local Models** — Switch anytime to **Whisper GGML** (`whisper-rs` compiled with **Apple Silicon Metal GPU** acceleration across 99 languages) or **NVIDIA Parakeet ONNX** (`ort` runtime).
+3. **Optional Cloud BYOK** — Bring your own Anthropic or OpenAI keys if desired (automatically bypassed whenever **Privacy Shield** is enabled).
 
 ---
 
-## Features
+## Highlights
 
-| | |
+- **VANI Studio (`⌘1`)** — Live dictation playground with reactive Breathwave SVG waveform, Raw vs. Cleaned diff view, Privacy Shield toggle, and KPI strip.
+- **Floating HUD & Menu Bar Studio (`⌘4`)** — Live customizable overlay with 3 waveform styles (`Breathwave`, `Equalizer Bars`, `Minimal Pill`), 4 screen positions (`Top Left`, `Top Center`, `Top Right`, `Bottom Center`), and 4 live Retina macOS Menu Bar icon styles (`Native Template`, `Rose Accent`, `Animated Live`, `Minimal + Dot`).
+- **Clean Background Behavior** — Opens VANI Studio on launch; closing the window hides the Dock icon (`ActivationPolicy::Accessory`) while VANI stays ready in the menu bar. Selecting **Open VANI Studio** or **Settings…** brings both the window and Dock icon back.
+- **Minimal HUD Flow** — Hold **`⌥ Option`** (recording waveform) → release (**`Transcribing…`** orbiting dots) → pastes directly at your cursor and disappears cleanly.
+- **Modes & Pipeline (`⌘5`)** — 5 context formatting modes with an interactive pipeline simulator and one-click **Test Apple LLM** preview.
+- **Dictionary & Snippets (`⌘6`)** — Chip-based personal dictionary with domain starter packs + voice snippet triggers with a live expansion tester.
+- **Voice Notes (`⌘3`)** — Split-screen Markdown editor with inline voice dictation and `.md` export.
+- **History (`⌘2`) & Analytics (`⌘8`)** — Searchable date-grouped transcripts with Raw/Cleaned diffs, 7-day dictation chart, and an interactive Voice vs. Keyboard speed calculator.
+- **Quick Command Palette (`⌘K`)** — Instant keyboard navigation and actions across the entire app.
+
+---
+
+## Architecture
+
+| Layer | Implementation |
 |---|---|
-| **On-device STT** | `SpeechAnalyzer` (macOS 26) — Whisper-class accuracy, no internet |
-| **AI polish** | `FoundationModels` removes filler words, fixes grammar, matches tone |
-| **Works everywhere** | Terminal, browsers, Electron apps, Slack — anything that accepts ⌘V |
-| **Context-aware** | Auto-detects Mail, Slack, Xcode and adjusts polish style |
-| **Custom vocabulary** | Bias recognition toward names, jargon, acronyms you use |
-| **Multilingual** | Any locale supported by Apple's speech models |
-| **Minimal overlay** | Tiny waveform pill with target app icon while recording |
-| **iCloud sync** | Hotkey, context, vocabulary roam across your Macs |
-| **Menu bar only** | No Dock icon, lives quietly in your menu bar |
+| **Desktop Shell** | Tauri v2 (Rust) + React 19 + Tailwind CSS + Vite |
+| **Apple On-Device AI Helper** | Bundled Swift 6 binary (`src-tauri/swift/vani_apple_ai.swift` → `vani-apple-ai`) providing `AVAudioEngine` 16 kHz CoreAudio capture, `SpeechAnalyzer` STT, `FoundationModels` LLM polish, and native TCC permission checks |
+| **Open-Source STT** | `whisper-rs` 0.14 with **Metal GPU** (`features = ["metal"]`) + `ort` ONNX Runtime for NVIDIA Parakeet (`parakeet-tdt-0.6b-v2` / `1.1b-v2`) |
+| **Global Hotkeys & Injection** | CoreGraphics `CGEventTap` (`⌥ Option`) with `AXIsProcessTrusted()` auto-retry, `tauri-plugin-global-shortcut` (`⌘⇧Space`, `⌘⇧D`), and native macOS paste injection |
+| **Menu Bar Icons** | Native Retina 36×36 RGBA generator (`src-tauri/src/tray_icons.rs`) with macOS template & live recording states |
 
 ---
 
-## Requirements
+## Install Prebuilt DMG
 
-- macOS 26 (Tahoe) or later
-- Apple Silicon (M-series chip)
+1. Download **[VANI-2.1.0.dmg](https://github.com/Anuragh33/Vani-app/releases/download/v2.1.0/VANI-2.1.0.dmg)** (9.8 MB, Apple Silicon) and drag **VANI.app** into **Applications**.
+2. Clear the macOS Gatekeeper quarantine flag once:
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/VANI.app
+   ```
+3. Launch **VANI.app** and enable **Microphone**, **Speech Recognition**, and **Accessibility** under **System Settings → Privacy & Security**.
+4. Hold **`⌥ Option`** in any app to speak and paste (or press **`⌘⇧Space`** / left-click the menu bar icon).
 
----
-
-## Install
-
-### Step 1 — Download
-
-**[Download Vani-0.1.2.dmg](https://github.com/Anuragh33/Vani/releases/latest)** from the Releases page.
-
----
-
-### Step 2 — Open the DMG
-
-Double-click the downloaded `Vani-0.1.2.dmg` file. A window will appear with:
-- `Vani.app`
-- An `Applications` folder shortcut
-- `Install Vani.command`
+> **Clamshell Mode Note:** Closing a MacBook Pro lid physically disconnects the built-in microphone in hardware. Open the lid slightly or select an external mic / AirPods in **System Settings → Sound → Input**.
 
 ---
 
-### Step 3 — Drag to Applications
+## Build from Source (macOS Apple Silicon)
 
-Drag **Vani.app** into the **Applications** folder shortcut inside the DMG.
+### Prerequisites
+- macOS 11+ (macOS 26+ recommended for Apple `FoundationModels` & `SpeechAnalyzer`)
+- Node.js 20+, Rust (`rustup`), and macOS Command Line Tools (`swiftc`)
 
----
-
-### Step 4 — Run the install script
-
-Because Vani is not notarized (that requires a paid Apple Developer account), macOS will show a **"damaged and can't be opened"** error if you try to open the app directly. The install script fixes this in one click.
-
-1. Double-click **Install Vani.command** inside the DMG
-2. macOS will ask if you're sure — click **Open**
-3. A Terminal window opens, runs the fix, and launches Vani automatically
-
-> **What the script does:** it runs `xattr -dr com.apple.quarantine /Applications/Vani.app` — this removes the internet quarantine flag macOS applies to downloaded files. It does nothing else.
-
-If you'd rather do it manually, open Terminal and run:
+### Build & Sign
 ```sh
-xattr -dr com.apple.quarantine /Applications/Vani.app
+git clone -b tauri-v2 https://github.com/Anuragh33/Vani-app.git
+cd Vani-app
+npm install
+
+# 1. Compile the native Swift 6 Apple AI & CoreAudio helper
+mkdir -p src-tauri/bin
+swiftc -O -parse-as-library -target arm64-apple-macos26.0 \
+  src-tauri/swift/vani_apple_ai.swift -o src-tauri/bin/vani-apple-ai
+
+# 2. Build the Tauri v2 macOS app bundle (with Metal GPU whisper-rs)
+npx tauri build --bundles app
+
+# 3. Ad-hoc sign with Microphone & Apple Events entitlements
+APP="src-tauri/target/release/bundle/macos/VANI.app"
+codesign --force --sign - --entitlements src-tauri/entitlements.plist \
+  "$APP/Contents/Resources/bin/vani-apple-ai"
+codesign --force --sign - --entitlements src-tauri/entitlements.plist \
+  --identifier com.vani.app "$APP"
 ```
 
----
-
-### Step 5 — Grant permissions
-
-On first launch, macOS will ask for three permissions. All three are required:
-
-| Permission | Why |
-|---|---|
-| **Microphone** | To record your voice while Fn is held |
-| **Speech Recognition** | To transcribe your speech on-device |
-| **Accessibility** | To type the transcribed text into other apps |
-
-If you accidentally deny any of them, go to **System Settings → Privacy & Security** and enable them manually for Vani.
-
----
-
-### Step 6 — Start dictating
-
-Vani lives in your **menu bar** (look for the mic icon). There is no Dock icon.
-
-1. Click the **mic icon** in the menu bar to open the popover
-2. Hold **Fn** anywhere on your Mac to start recording
-3. Speak naturally
-4. Release **Fn** — Vani transcribes and injects the polished text into whatever app is focused
-
-> **Tip:** Go to **System Settings → Keyboard** and set "Press Fn key to" → **Do Nothing** so macOS doesn't intercept the Fn key before Vani does.
-
----
-
-## Build from source
-
+### Frontend Preview in Browser
 ```sh
-brew install xcodegen
-git clone https://github.com/Anuragh33/Vani.git
-cd Vani
-xcodegen generate
-open Vani.xcodeproj
+npm run dev
+# Opens http://localhost:5173/ with an automatic browser preview sandbox
 ```
 
-Set your signing Team in Xcode → ⌘R.
-
 ---
 
-## Tech stack
+## Branches
 
-| Layer | Technology |
-|---|---|
-| Language | Swift 6 |
-| UI | SwiftUI + AppKit |
-| Speech-to-text | `Speech` — `SpeechAnalyzer` + `SpeechTranscriber` |
-| AI text polish | `FoundationModels` — `SystemLanguageModel` |
-| Text injection | Accessibility API + clipboard + ⌘V fallback |
-| Hotkey | `CGEventTap` via CoreGraphics |
-| Audio | `AVAudioEngine` + Accelerate FFT |
-
----
-
-## Privacy
-
-- No data ever leaves your Mac
-- No analytics, no tracking, no accounts
-- Dictation history lives in memory only and clears on quit
+- **`tauri-v2`** *(current release — v2.1.0)*: Full hybrid Tauri v2 + Swift 6 Apple Intelligence + Whisper Metal + Parakeet ONNX desktop app.
+- **`main`**: Earlier standalone Swift 6 v0.1 prototype.
 
 ---
 
