@@ -170,7 +170,7 @@ export default function VaniNotes({ notes, onSaveNote, onDeleteNote, onExportNot
   const words = countWords(activeNote?.content);
 
   return (
-    <div className="grid h-full min-h-[580px] gap-4 md:grid-cols-[240px_1fr] animate-fade-in">
+    <div className="grid min-h-[580px] flex-1 gap-4 md:grid-cols-[260px_1fr] xl:grid-cols-[300px_1fr] animate-fade-in">
       {/* Left Note List Rail */}
       <div className="vani-card flex flex-col overflow-hidden p-4">
         <div className="flex items-center justify-between gap-2">

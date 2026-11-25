@@ -60,7 +60,7 @@ const HUD_POSITIONS = [
   { id: "top-left", label: "Top Left", icon: CornerUpLeft },
   { id: "top-center", label: "Top Center", icon: PanelTop },
   { id: "top-right", label: "Top Right", icon: CornerUpRight },
-  { id: "bottom-center", label: "Bottom Center", icon: PanelBottom },
+  { id: "bottom-center", label: "Bottom", icon: PanelBottom },
 ];
 
 const TRAY_STYLES = [
@@ -134,7 +134,7 @@ function MenuBarTrayIcon({ style = "monochrome", phase = "idle", isLightBar = fa
 export default function HudStudioView({ settings, onSaveSettings, onNavigate, onNotify }) {
   const [wallpaperId, setWallpaperId] = useState("obsidian");
   const [phase, setPhase] = useState("recording"); // idle | recording | processing | done | error
-  const [trayOpen, setTrayOpen] = useState(true);
+  const [trayOpen, setTrayOpen] = useState(false);
   const [energy, setEnergy] = useState(0.68);
   const [elapsedMs, setElapsedMs] = useState(3800);
   const [cycling, setCycling] = useState(false);
@@ -279,7 +279,7 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
 
         {/* Simulated macOS Screen */}
         <div
-          className="relative h-[340px] w-full select-none overflow-hidden"
+          className="relative h-[340px] w-full select-none overflow-hidden xl:h-[400px]"
           style={{ background: wallpaper.desktopBg }}
         >
           {/* macOS Top Menu Bar */}
@@ -581,7 +581,7 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
                       if (pos.id === "top-right") setTrayOpen(false);
                       onNotify?.(`HUD position set to ${pos.label}`);
                     }}
-                    className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition ${
+                    className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-2.5 py-2 text-xs font-medium transition ${
                       active
                         ? "border-[var(--brand)] bg-[var(--bg-active)] text-[var(--brand)]"
                         : "border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:border-[var(--border-strong)]"
@@ -595,11 +595,11 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
             </div>
           </div>
 
-          {/* Voice Energy Slider + Display Toggles */}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3.5 space-y-2 sm:col-span-2">
+          {/* Voice Energy Slider + 3 Equal-Column Display Toggles */}
+          <div className="space-y-3">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3.5 space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-medium text-[var(--text)]">Simulated Voice Level</span>
+                <span className="font-medium text-[var(--text)]">Preview Wave Intensity</span>
                 <span className="font-mono text-[var(--brand)]">{Math.round(energy * 100)}%</span>
               </div>
               <input
@@ -616,23 +616,25 @@ export default function HudStudioView({ settings, onSaveSettings, onNavigate, on
               />
             </div>
 
-            {[
-              ["hudShowTimer", "Show Elapsed Timer", hudShowTimer],
-              ["hudShowMode", "Show Mode Pill", hudShowMode],
-              ["hudGlass", "Frosted Glass Blur", hudGlass],
-            ].map(([key, label, val]) => (
-              <div
-                key={key}
-                className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3.5 py-2.5"
-              >
-                <span className="text-xs font-medium text-[var(--text)]">{label}</span>
-                <ToggleSwitch
-                  checked={val}
-                  onChange={(next) => onSaveSettings({ [key]: next })}
-                  label={label}
-                />
-              </div>
-            ))}
+            <div className="grid gap-2.5 sm:grid-cols-3">
+              {[
+                ["hudShowTimer", "Elapsed Timer", hudShowTimer],
+                ["hudShowMode", "Mode Pill", hudShowMode],
+                ["hudGlass", "Glass Blur", hudGlass],
+              ].map(([key, label, val]) => (
+                <div
+                  key={key}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5"
+                >
+                  <span className="text-xs font-medium text-[var(--text)]">{label}</span>
+                  <ToggleSwitch
+                    checked={val}
+                    onChange={(next) => onSaveSettings({ [key]: next })}
+                    label={label}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 

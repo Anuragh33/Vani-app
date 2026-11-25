@@ -36,7 +36,7 @@ const MODES = [
   },
   {
     id: "slack",
-    name: "Slack & Chat",
+    name: "Slack",
     icon: MessageSquare,
     color: "text-emerald-400",
     bg: "bg-emerald-500/15",
@@ -56,7 +56,7 @@ const MODES = [
   },
   {
     id: "code",
-    name: "Code & Prompts",
+    name: "Code",
     icon: Code2,
     color: "text-violet-400",
     bg: "bg-violet-500/15",
@@ -146,8 +146,8 @@ export default function ModesView({ settings, appleAi, onSaveSettings, onNotify 
         </div>
       </div>
 
-      {/* Mode Cards Grid */}
-      <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+      {/* Mode Cards Grid — 5 crisp equal columns on wide/fullscreen, responsive below */}
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {MODES.map((mode) => {
           const Icon = mode.icon;
           const selected = activeModeId === mode.id;

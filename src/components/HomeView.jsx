@@ -46,11 +46,11 @@ function FloatingPillSandbox({ settings, onOpenHudStudio }) {
   const [previewPhase, setPreviewPhase] = useState("recording");
 
   return (
-    <div className="vani-card p-5 flex flex-col justify-between gap-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
+    <div className="vani-card flex h-full flex-col gap-4 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-[var(--brand)]" />
+            <Sparkles className="h-4 w-4 shrink-0 text-[var(--brand)]" />
             <h3 className="text-sm font-semibold text-[var(--text)]">Floating HUD Preview</h3>
           </div>
           <p className="mt-1 text-xs text-[var(--muted)]">
@@ -64,7 +64,7 @@ function FloatingPillSandbox({ settings, onOpenHudStudio }) {
             </button>
           </p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
+        <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5">
           {[
             ["recording", "Rec"],
             ["processing", "AI"],
@@ -87,7 +87,7 @@ function FloatingPillSandbox({ settings, onOpenHudStudio }) {
       </div>
 
       {/* Simulated macOS desktop strip using the actual shared Overlay HUD */}
-      <div className="relative flex h-24 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[radial-gradient(ellipse_at_top,rgba(244,114,182,0.14),transparent_65%),var(--bg-app)]">
+      <div className="relative flex min-h-[124px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[radial-gradient(ellipse_at_top,rgba(244,114,182,0.14),transparent_65%),var(--bg-app)]">
         {(previewPhase === "recording" || previewPhase === "processing") && (
           <FloatingHudPill
             phase={previewPhase}
@@ -405,9 +405,9 @@ export default function HomeView({
             levels={recorder.levels}
             active={phase === "recording"}
             simulate={phase === "recording" && simulatingMic}
-            width={420}
+            width={520}
             height={56}
-            className="max-w-full"
+            className="w-full max-w-[520px]"
           />
 
           <div className="flex flex-wrap items-center justify-center gap-3">
@@ -599,10 +599,10 @@ export default function HomeView({
       </div>
 
       {/* Bottom Grid: Floating HUD Sandbox + Recent Transcriptions */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid items-stretch gap-4 lg:grid-cols-2">
         <FloatingPillSandbox settings={settings} onOpenHudStudio={() => onNavigate("hud")} />
 
-        <div className="vani-card p-5 flex flex-col justify-between gap-3">
+        <div className="vani-card flex h-full flex-col gap-3 p-5">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-[var(--text)]">Recent Dictations</h3>
             <button

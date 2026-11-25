@@ -296,8 +296,8 @@ export default function ModelsView({
         </div>
       )}
 
-      {/* Model Cards */}
-      <div className="grid gap-3">
+      {/* Model Cards — 1 col on compact, 2 cols on wide/fullscreen */}
+      <div className="grid gap-3 xl:grid-cols-2">
         {filteredModels.map((model) => {
           const dl = downloads?.[model.id];
           const progress = dl && dl.total ? Math.min(100, (dl.received / dl.total) * 100) : 0;

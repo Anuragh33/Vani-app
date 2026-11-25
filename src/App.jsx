@@ -644,8 +644,16 @@ export default function App() {
 
       {/* Main Content Stage */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
-          <div className="mx-auto max-w-[1060px]">{renderContent()}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
+          <div
+            className={`mx-auto w-full ${
+              active === "notes"
+                ? "flex h-full min-h-full max-w-[1520px] flex-col"
+                : "max-w-[1360px]"
+            }`}
+          >
+            {renderContent()}
+          </div>
         </div>
       </div>
 
