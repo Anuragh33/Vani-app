@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Anuragh33/Vani/main/banner.png" alt="VANI — Best Local-First Voice Dictation for Windows & macOS" width="100%" />
+  <img src="./.github/assets/banner.png" alt="VANI — Best Local-First Voice Dictation for Windows & macOS" width="100%" />
 </p>
 
 <p align="center">
@@ -26,8 +26,8 @@
     <img src="https://img.shields.io/badge/Download%20for%20macOS-VANI%202.1.0%20(.dmg)-ec4899?style=for-the-badge&logo=apple&logoColor=white" />
   </a>
   &nbsp;
-  <a href="https://github.com/Anuragh33/Vani">
-    <img src="https://img.shields.io/badge/Website-Anuragh33%2FVani-18181b?style=for-the-badge&logo=github&logoColor=white" />
+  <a href="https://vani-site.vercel.app">
+    <img src="https://img.shields.io/badge/Website-vani--site.vercel.app-18181b?style=for-the-badge&logo=vercel&logoColor=white" />
   </a>
 </p>
 
@@ -66,8 +66,9 @@ Most top local AI dictation apps are **Mac-only** — leaving Windows users with
 ## Highlights
 
 - **VANI Studio (`Ctrl+1` / `⌘1`)** — Live dictation playground with reactive Breathwave SVG waveform, Raw vs. Cleaned diff view, Privacy Shield toggle, and KPI strip.
-- **Hands-Free Vani Actions (`Ctrl+5` / `⌘5`)** — Tap **`Right Alt + Ctrl`** (Windows) or **`⌥ + ⌘`** (macOS) once for completely hands-free control: open desktop or web apps (*"Open Antigravity"*, *"Open Apple Music"*, *"Open ChatGPT"*, *"Open Claude"*), auto-focus chat inputs, and send messages directly without pressing Enter!
-- **Floating HUD & System Tray / Menu Bar Studio (`Ctrl+4` / `⌘4`)** — Live customizable overlay with 3 styles (`Breathwave`, `Equalizer Bars`, `Minimal Pill`), 4 screen positions, and 4 tray icon styles — with a live **Windows 11 taskbar** or **macOS menu bar** simulator matching your OS.
+- **Hands-Free Vani Actions (`Ctrl+5` / `⌘5`)** — Tap **`Right Alt + Ctrl`** (Windows) or **`⌥ + ⌘`** (macOS) once for completely hands-free control: open desktop or web apps (*"Open Antigravity"*, *"Open Apple Music"*, *"Open ChatGPT"*, *"Open Claude"*), open browser tabs & search (*"Open new tab on Safari and search Netflix"*), jump straight to 35+ System Settings panes (*"Open Wi-Fi settings"*, *"Bluetooth settings"*) or Finder/Explorer folders (*"Open Downloads"*), and auto-send dictated messages without pressing Enter!
+- **Full-Screen Floating HUD (`Ctrl+4` / `⌘4`)** — Non-focus-stealing overlay (`NSPanel` with `FullScreenAuxiliary` on macOS, `set_focusable(false)` on Windows) that floats cleanly even over full-screen apps, with 3 waveform styles (`Breathwave`, `Equalizer Bars`, `Minimal Pill`), 4 screen positions, and 4 tray icon styles.
+- **High-Accuracy Local Transcription** — Zero-drop native audio capture (`AVAudioEngine` / WASAPI with 80 Hz rumble filter, anti-aliased resampling, and speech gain normalization), verbatim `General` mode with LLM word-drift protection, Whisper beam-search decoding, and regional English accent support (`en-US`, `en-IN`, `en-GB`, `en-AU`, `en-CA`).
 - **Minimal HUD Flow** — Hold **`Right Alt`** / **`⌥ Option`** (waveform) → release (**`Transcribing…`** orbiting dots) → pastes directly at your cursor and disappears cleanly.
 - **Modes & Pipeline (`Ctrl+6` / `⌘6`)** — 5 context formatting modes (`General`, `Email`, `Slack`, `Notes`, `Code`) with an interactive pipeline simulator.
 - **Dictionary & Snippets (`Ctrl+7` / `⌘7`)** — Chip-based personal dictionary with domain starter packs + voice snippet triggers with a live expansion tester.
