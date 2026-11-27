@@ -13,22 +13,96 @@ pub struct ActiveNativeRecording {
     result_rx: Option<mpsc::Receiver<Result<(PathBuf, usize, f32)>>>,
 }
 
+fn high_pass_80hz(samples: &[f32], src_rate: u32) -> Vec<f32> {
+    if samples.is_empty() || src_rate == 0 {
+        return samples.to_vec();
+    }
+    let rc = 1.0_f64 / (2.0 * std::f64::consts::PI * 80.0);
+    let dt = 1.0_f64 / src_rate as f64;
+    let alpha = (rc / (rc + dt)) as f32;
+    let mut out = Vec::with_capacity(samples.len());
+    let mut prev_y = 0.0_f32;
+    let mut prev_x = samples[0];
+    for &x in samples {
+        let y = alpha * (prev_y + x - prev_x);
+        out.push(y);
+        prev_y = y;
+        prev_x = x;
+    }
+    out
+}
+
+/// Anti-aliased Lanczos-3 resampler to 16 kHz (avoids linear-interpolation high-frequency aliasing).
 fn resample_to_16k(samples: &[f32], src_rate: u32) -> Vec<f32> {
     if src_rate == 16000 || samples.is_empty() {
         return samples.to_vec();
     }
     let ratio = src_rate as f64 / 16000.0;
     let out_len = (samples.len() as f64 / ratio) as usize;
+    let scale = if ratio > 1.0 { 1.0 / ratio } else { 1.0 };
+    let a = 3.0_f64;
+    let radius = (a / scale).ceil() as isize;
+    let len = samples.len() as isize;
+
+    let sinc = |x: f64| -> f64 {
+        if x.abs() < 1e-9 {
+            1.0
+        } else {
+            let px = std::f64::consts::PI * x;
+            px.sin() / px
+        }
+    };
+
     (0..out_len)
         .map(|i| {
-            let pos = i as f64 * ratio;
-            let idx = pos as usize;
-            let frac = (pos - idx as f64) as f32;
-            let a = samples.get(idx).copied().unwrap_or(0.0);
-            let b = samples.get(idx + 1).copied().unwrap_or(a);
-            a + frac * (b - a)
+            let center = i as f64 * ratio;
+            let base = center.floor() as isize;
+            let mut sum = 0.0_f64;
+            let mut wsum = 0.0_f64;
+            for k in (base - radius)..=(base + radius) {
+                if k >= 0 && k < len {
+                    let dist = (center - k as f64) * scale;
+                    if dist.abs() < a {
+                        let w = sinc(dist) * sinc(dist / a);
+                        sum += samples[k as usize] as f64 * w;
+                        wsum += w;
+                    }
+                }
+            }
+            if wsum > 1e-9 { (sum / wsum) as f32 } else { 0.0 }
         })
         .collect()
+}
+
+fn normalize_and_pad_16k(samples: &[f32]) -> (Vec<f32>, f32) {
+    if samples.is_empty() {
+        return (Vec::new(), 0.0);
+    }
+    let peak = samples.iter().fold(0.0_f32, |acc, &s| acc.max(s.abs()));
+    let gain = if peak >= 0.008 && peak < 0.68 {
+        (0.70 / peak).min(6.0)
+    } else {
+        1.0
+    };
+    let pad = 1920usize; // 120 ms clean silence padding at start and end
+    let mut out = Vec::with_capacity(samples.len() + pad * 2);
+    out.resize(pad, 0.0);
+    let mut out_peak = 0.0_f32;
+    for &s in samples {
+        let boosted = s * gain;
+        let limited = if boosted > 0.95 {
+            0.95 + 0.05 * ((boosted - 0.95) * 4.0).tanh()
+        } else if boosted < -0.95 {
+            -0.95 + 0.05 * ((boosted + 0.95) * 4.0).tanh()
+        } else {
+            boosted
+        };
+        let c = limited.clamp(-1.0, 1.0);
+        out_peak = out_peak.max(c.abs());
+        out.push(c);
+    }
+    out.resize(out.len() + pad, 0.0);
+    (out, peak.max(out_peak))
 }
 
 fn write_wav_16k(path: &PathBuf, samples: &[f32]) -> Result<()> {
@@ -209,6 +283,10 @@ pub fn start_native_recording(app: &AppHandle) -> Result<ActiveNativeRecording> 
 
         // Wait until stop or cancel signal
         let cancelled = stop_rx.recv().unwrap_or(true);
+        if !cancelled {
+            // Brief drain so the final WASAPI capture packet lands before dropping the stream
+            std::thread::sleep(Duration::from_millis(120));
+        }
         drop(stream);
 
         if cancelled {
@@ -218,10 +296,9 @@ pub fn start_native_recording(app: &AppHandle) -> Result<ActiveNativeRecording> 
         }
 
         let raw = captured.lock().map(|g| g.clone()).unwrap_or_default();
-        let samples_16k = resample_to_16k(&raw, sample_rate);
-        let peak = samples_16k
-            .iter()
-            .fold(0.0f32, |acc, &s| acc.max(s.abs()));
+        let filtered = high_pass_80hz(&raw, sample_rate);
+        let resampled = resample_to_16k(&filtered, sample_rate);
+        let (samples_16k, peak) = normalize_and_pad_16k(&resampled);
         let count = samples_16k.len();
 
         match write_wav_16k(&wav_path, &samples_16k) {

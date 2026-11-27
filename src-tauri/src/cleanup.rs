@@ -2,14 +2,92 @@ use anyhow::Result;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
+// Only strip unambiguous non-lexical vocal hesitation fillers (um, uh, erm, hmm).
+// Never delete content words like "like", "right", "actually", "literally", "basically",
+// "kind of", or "sort of", which broke normal sentences ("I would like to...", "right now").
 static FILLER_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)\b(um+|uh+|like|you know|kind of|sort of|basically|literally|actually|I mean|right\??)\b[,]?\s*")
+    Regex::new(r"(?i)(?:^|[\s,])\b(?:um+|uh+|uh-huh|erm+|hmm+|mhm+)\b[,.]?(?:\s+|$)")
         .unwrap()
 });
 
+static SPACE_BEFORE_PUNCT_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\s+([,.;:!?])").unwrap()
+});
+
 pub fn remove_filler_words(text: &str) -> String {
-    let out = FILLER_RE.replace_all(text, " ");
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
+    let stripped = FILLER_RE.replace_all(text, " ");
+    let collapsed = stripped.split_whitespace().collect::<Vec<_>>().join(" ");
+    SPACE_BEFORE_PUNCT_RE.replace_all(&collapsed, "$1").trim().to_string()
+}
+
+/// Safe deterministic cleanup for General mode: preserves every spoken word verbatim,
+/// normalizes spacing/punctuation, and capitalizes the first letter if needed.
+pub fn light_format_general(text: &str) -> String {
+    let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let cleaned = SPACE_BEFORE_PUNCT_RE.replace_all(&collapsed, "$1").trim().to_string();
+    let mut chars = cleaned.chars();
+    match chars.next() {
+        Some(first) if first.is_ascii_lowercase() => {
+            format!("{}{}", first.to_ascii_uppercase(), chars.as_str())
+        }
+        _ => cleaned,
+    }
+}
+
+/// Guard against small-LLM hallucinations (e.g., answering a dictated question or replacing
+/// words with unrelated paraphrases). Returns false when the polished output drifts too far
+/// from the spoken transcript so callers can safely fall back to the faithful transcript.
+pub fn is_safe_polish(raw: &str, polished: &str, context: &str) -> bool {
+    let raw_t = raw.trim();
+    let pol_t = polished.trim();
+    if pol_t.is_empty() || raw_t.is_empty() {
+        return false;
+    }
+
+    // Reject classic chatbot refusal / answer prefixes
+    let low = pol_t.to_lowercase();
+    for bad_prefix in [
+        "sure,",
+        "certainly,",
+        "here is the cleaned",
+        "here's the cleaned",
+        "i cannot",
+        "i can't",
+        "as an ai",
+    ] {
+        if low.starts_with(bad_prefix) && !raw_t.to_lowercase().starts_with(bad_prefix) {
+            return false;
+        }
+    }
+
+    let tokenize = |s: &str| -> Vec<String> {
+        s.split(|c: char| !c.is_alphanumeric() && c != '\'')
+            .filter(|w| w.len() >= 2)
+            .map(|w| w.to_lowercase())
+            .collect()
+    };
+
+    let raw_words = tokenize(raw_t);
+    let pol_words = tokenize(pol_t);
+    if raw_words.is_empty() || pol_words.is_empty() {
+        return true;
+    }
+
+    // Allow slightly more structural expansion for email/notes, stricter for general/slack/code
+    let (min_ratio, max_ratio, min_overlap) = match context {
+        "email" | "notes" => (0.55_f32, 1.85_f32, 0.55_f32),
+        _ => (0.65_f32, 1.40_f32, 0.65_f32),
+    };
+
+    let ratio = pol_words.len() as f32 / raw_words.len() as f32;
+    if ratio < min_ratio || ratio > max_ratio {
+        return false;
+    }
+
+    let pol_set: std::collections::HashSet<&str> = pol_words.iter().map(|s| s.as_str()).collect();
+    let kept = raw_words.iter().filter(|w| pol_set.contains(w.as_str())).count();
+    let overlap = kept as f32 / raw_words.len() as f32;
+    overlap >= min_overlap
 }
 
 pub fn text_to_bullets(text: &str) -> String {
@@ -121,7 +199,9 @@ pub async fn transcribe_with_openai(wav_bytes: &[u8], language: &str, api_key: &
         .text("model", "whisper-1")
         .part("file", part);
     if language != "auto" && !language.is_empty() {
-        form = form.text("language", language.to_string());
+        // OpenAI Whisper expects ISO-639-1 two-letter language code (e.g. "en" instead of "en-IN")
+        let base_lang = language.split(['-', '_']).next().unwrap_or(language);
+        form = form.text("language", base_lang.to_string());
     }
     let client = reqwest::Client::new();
     let resp = client

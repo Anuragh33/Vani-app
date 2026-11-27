@@ -108,6 +108,9 @@ function useRecorder({
   const stopRequestedRef = useRef(false);
   const usingNativeRef = useRef(false);
   const unsubLevelRef = useRef(null);
+  const silenceConfigRef = useRef({ enabledSilenceDetection, silenceDurationMs, waitForSpeech });
+  silenceConfigRef.current = { enabledSilenceDetection, silenceDurationMs, waitForSpeech };
+  const sessionSilenceOverrideRef = useRef(null);
   const [levels, setLevels] = useState(() => Array.from({ length: POINTS }, () => 0.08));
   const [isRecording, setIsRecording] = useState(false);
 
@@ -215,11 +218,13 @@ function useRecorder({
     }
   }, [finalizeNative, finalizeWeb]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (opts = {}) => {
     if (isRecordingRef.current) return;
     stopRequestedRef.current = false;
     silenceStartedAtRef.current = null;
     heardSpeechRef.current = false;
+    sessionSilenceOverrideRef.current =
+      typeof opts?.enabledSilenceDetection === "boolean" ? opts.enabledSilenceDetection : null;
 
     // Prefer native Rust/OS audio recorder (AVAudioEngine on macOS, WASAPI on Windows) inside Tauri
     if (canUseNativeRecorder()) {
@@ -229,14 +234,22 @@ function useRecorder({
           const clamped = Math.max(0.06, Math.min(1, Number(lvl) || 0.06));
           setLevels((prev) => [...prev.slice(1), clamped]);
 
-          if (clamped >= 0.115) {
+          if (clamped >= 0.085) {
             heardSpeechRef.current = true;
           }
 
-          if (enabledSilenceDetection && (!waitForSpeech || heardSpeechRef.current)) {
-            if (clamped < 0.085) {
+          const cfg = silenceConfigRef.current;
+          // Hands-Free (waitForSpeech=true) always uses silence detection even when promoted mid-recording from PTT
+          const silenceEnabled = cfg.waitForSpeech
+            ? true
+            : sessionSilenceOverrideRef.current !== null
+              ? sessionSilenceOverrideRef.current
+              : cfg.enabledSilenceDetection;
+
+          if (silenceEnabled && (!cfg.waitForSpeech || heardSpeechRef.current)) {
+            if (clamped < 0.065) {
               if (!silenceStartedAtRef.current) silenceStartedAtRef.current = Date.now();
-              if (Date.now() - silenceStartedAtRef.current >= silenceDurationMs) {
+              if (Date.now() - silenceStartedAtRef.current >= cfg.silenceDurationMs) {
                 stop();
               }
             } else {

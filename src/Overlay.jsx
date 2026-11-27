@@ -408,6 +408,7 @@ export default function Overlay() {
   const recorderRef = useRef(null);
   const handsFreeRef = useRef(false);
   const [handsFreeMode, setHandsFreeMode] = useState(false);
+  const [pushToTalkMode, setPushToTalkMode] = useState(false);
 
   const clearIdleExit = useCallback(() => {
     if (idleExitRef.current) {
@@ -508,7 +509,8 @@ export default function Overlay() {
   );
 
   const recorder = useRecorder({
-    enabledSilenceDetection: handsFreeMode || hudCfg.autoStopOnSilence,
+    // Never cut off Push-to-Talk while the user is actively holding Option / Right Alt!
+    enabledSilenceDetection: handsFreeMode || (!pushToTalkMode && hudCfg.autoStopOnSilence),
     silenceDurationMs: handsFreeMode ? Math.min(hudCfg.silenceDurationMs || 1600, 1600) : hudCfg.silenceDurationMs,
     waitForSpeech: handsFreeMode,
     onStateChange: (recording) => {
@@ -605,13 +607,15 @@ export default function Overlay() {
       setText("");
       requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
     });
-    const offStart = window.vani?.onDictationStart?.(() => {
+    const offStart = window.vani?.onDictationStart?.((payload) => {
       if (autoHideRef.current) {
         clearTimeout(autoHideRef.current);
         autoHideRef.current = null;
       }
       handsFreeRef.current = false;
       setHandsFreeMode(false);
+      const isPtt = Boolean(payload?.pushToTalk);
+      setPushToTalkMode(isPtt);
       setPhase("recording");
       setText("");
       setElapsedMs(0);
@@ -619,10 +623,11 @@ export default function Overlay() {
       stopClock();
       clockRef.current = setInterval(() => setElapsedMs(Date.now() - startTsRef.current), 200);
       setVisible(true);
-      recorder.start();
+      recorder.start({ enabledSilenceDetection: isPtt ? false : undefined });
     });
     const offStop = window.vani?.onDictationStop?.(() => {
       if (handsFreeRef.current) return;
+      setPushToTalkMode(false);
       stopClock();
       setPhase("processing");
       setVisible(true);
@@ -635,6 +640,7 @@ export default function Overlay() {
       }
       handsFreeRef.current = true;
       setHandsFreeMode(true);
+      setPushToTalkMode(false);
       setPhase("recording");
       setVisible(true);
       armIdleExit();

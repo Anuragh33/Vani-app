@@ -125,31 +125,153 @@ func writeWav16kMono(samples: [Int16], to url: URL) throws {
 
 final class SampleCollector: @unchecked Sendable {
     private let lock = NSLock()
-    private var pcm: [Int16] = []
+    private var rawMono: [Float] = []
     private var maxPeak: Float = 0
 
-    func append(floats: UnsafePointer<Float>, count: Int) -> Float {
+    func append(buffer: AVAudioPCMBuffer) -> Float {
+        let count = Int(buffer.frameLength)
+        guard count > 0, let channels = buffer.floatChannelData else { return 0 }
+        let chCount = max(1, Int(buffer.format.channelCount))
+
+        var mono = [Float](repeating: 0, count: count)
+        var sumSq: Float = 0
         var peak: Float = 0
-        var chunk = [Int16](repeating: 0, count: count)
-        for i in 0..<count {
-            let v = max(-1.0, min(1.0, floats[i]))
-            let av = abs(v)
-            if av > peak { peak = av }
-            chunk[i] = Int16(v * 32767.0)
+
+        if chCount == 1 {
+            let src = channels[0]
+            for i in 0..<count {
+                let v = src[i]
+                mono[i] = v
+                let av = abs(v)
+                if av > peak { peak = av }
+                sumSq += v * v
+            }
+        } else {
+            let inv = 1.0 / Float(chCount)
+            for i in 0..<count {
+                var s: Float = 0
+                for c in 0..<chCount { s += channels[c][i] }
+                let v = s * inv
+                mono[i] = v
+                let av = abs(v)
+                if av > peak { peak = av }
+                sumSq += v * v
+            }
         }
+
+        let rms = sqrt(sumSq / Float(count))
         lock.lock()
-        pcm.append(contentsOf: chunk)
+        rawMono.append(contentsOf: mono)
         if peak > maxPeak { maxPeak = peak }
         lock.unlock()
-        return peak
+        return rms
     }
 
-    func snapshot() -> ([Int16], Float) {
+    func snapshot() -> ([Float], Float) {
         lock.lock()
-        let out = (pcm, maxPeak)
+        let out = (rawMono, maxPeak)
         lock.unlock()
         return out
     }
+}
+
+/// First-order 80 Hz high-pass filter to remove DC offset, desk thumps, and laptop fan rumble.
+func highPass80Hz(_ samples: [Float], sampleRate: Double) -> [Float] {
+    guard !samples.isEmpty, sampleRate > 0 else { return samples }
+    let rc = 1.0 / (2.0 * Double.pi * 80.0)
+    let dt = 1.0 / sampleRate
+    let alpha = Float(rc / (rc + dt))
+    var out = [Float](repeating: 0, count: samples.count)
+    var prevY: Float = 0
+    var prevX: Float = samples[0]
+    for i in 0..<samples.count {
+        let x = samples[i]
+        let y = alpha * (prevY + x - prevX)
+        out[i] = y
+        prevY = y
+        prevX = x
+    }
+    return out
+}
+
+/// Clean single-pass offline resampling from hardware sample rate to 16 kHz mono (zero tap-boundary drops/gaps).
+func resampleContiguousTo16k(_ samples: [Float], fromRate: Double) -> [Float] {
+    guard !samples.isEmpty else { return [] }
+    if abs(fromRate - 16000.0) < 1.0 { return samples }
+
+    guard let inFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: fromRate, channels: 1, interleaved: false),
+          let outFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000.0, channels: 1, interleaved: false),
+          let converter = AVAudioConverter(from: inFormat, to: outFormat),
+          let inBuf = AVAudioPCMBuffer(pcmFormat: inFormat, frameCapacity: AVAudioFrameCount(samples.count)) else {
+        return samples
+    }
+
+    inBuf.frameLength = AVAudioFrameCount(samples.count)
+    if let dst = inBuf.floatChannelData?[0] {
+        samples.withUnsafeBufferPointer { src in
+            if let base = src.baseAddress {
+                dst.update(from: base, count: samples.count)
+            }
+        }
+    }
+
+    let expectedOut = Int(ceil(Double(samples.count) * (16000.0 / fromRate))) + 256
+    guard let outBuf = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: AVAudioFrameCount(expectedOut)) else {
+        return samples
+    }
+
+    var supplied = false
+    var convErr: NSError?
+    converter.convert(to: outBuf, error: &convErr) { _, status in
+        if supplied {
+            status.pointee = .endOfStream
+            return nil
+        }
+        supplied = true
+        status.pointee = .haveData
+        return inBuf
+    }
+
+    let outCount = Int(outBuf.frameLength)
+    guard outCount > 0, let ch = outBuf.floatChannelData?[0] else {
+        return samples
+    }
+    return Array(UnsafeBufferPointer(start: ch, count: outCount))
+}
+
+/// Gently normalize quiet speech toward ~0.70 peak (max +15.5 dB / 6x gain) without boosting pure room silence.
+func normalizeAndPad16k(_ samples: [Float]) -> ([Int16], Float) {
+    guard !samples.isEmpty else { return ([], 0) }
+    var peak: Float = 0
+    for s in samples {
+        let av = abs(s)
+        if av > peak { peak = av }
+    }
+
+    // Only apply gain boost when real speech energy is present (peak >= 0.008)
+    let gain: Float = (peak >= 0.008 && peak < 0.68) ? min(6.0, 0.70 / peak) : 1.0
+
+    // Add 120 ms (1920 samples) of clean silence padding on both ends so STT never clips first/last syllables
+    let pad = 1920
+    var pcm = [Int16](repeating: 0, count: samples.count + pad * 2)
+    var outPeak: Float = 0
+    for i in 0..<samples.count {
+        let boosted = samples[i] * gain
+        // Soft clip above 0.95 to avoid harsh digital distortion
+        let limited: Float
+        if boosted > 0.95 {
+            limited = 0.95 + 0.05 * tanh((boosted - 0.95) * 4.0)
+        } else if boosted < -0.95 {
+            limited = -0.95 + 0.05 * tanh((boosted + 0.95) * 4.0)
+        } else {
+            limited = boosted
+        }
+        let clamped = max(-1.0, min(1.0, limited))
+        let av = abs(clamped)
+        if av > outPeak { outPeak = av }
+        pcm[pad + i] = Int16(clamped * 32767.0)
+    }
+    return (pcm, outPeak)
 }
 
 func runRecord(outPath: String) async {
@@ -174,40 +296,17 @@ func runRecord(outPath: String) async {
         exit(11)
     }
 
-    guard let targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false),
-          let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
-        fputs("Failed to initialize audio format converter.\n", stderr)
-        exit(12)
-    }
-
     let collector = SampleCollector()
     var lastPrint = CFAbsoluteTimeGetCurrent()
 
+    // Record pure unmodified native-rate PCM in the real-time tap (zero live resampling dropouts!)
     inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { buffer, _ in
-        let ratio = 16000.0 / inputFormat.sampleRate
-        let outCap = AVAudioFrameCount(Double(buffer.frameLength) * ratio + 64)
-        guard let outBuf = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outCap) else { return }
-
-        var consumed = false
-        var err: NSError?
-        converter.convert(to: outBuf, error: &err) { _, status in
-            if consumed {
-                status.pointee = .noDataNow
-                return nil
-            }
-            consumed = true
-            status.pointee = .haveData
-            return buffer
-        }
-
-        if let ch = outBuf.floatChannelData?[0], outBuf.frameLength > 0 {
-            let peak = collector.append(floats: ch, count: Int(outBuf.frameLength))
-            let now = CFAbsoluteTimeGetCurrent()
-            if now - lastPrint >= 0.04 {
-                lastPrint = now
-                print(String(format: "LEVEL %.4f", min(1.0, peak * 2.6)))
-                fflush(stdout)
-            }
+        let rms = collector.append(buffer: buffer)
+        let now = CFAbsoluteTimeGetCurrent()
+        if now - lastPrint >= 0.04 {
+            lastPrint = now
+            print(String(format: "LEVEL %.4f", min(1.0, rms * 6.5)))
+            fflush(stdout)
         }
     }
 
@@ -233,13 +332,21 @@ func runRecord(outPath: String) async {
         }
     }
 
+    // Brief 140ms drain so the final CoreAudio tap buffer (containing the last syllable) lands cleanly
+    try? await Task.sleep(nanoseconds: 140_000_000)
+
     inputNode.removeTap(onBus: 0)
     engine.stop()
 
-    let (samples, maxPeak) = collector.snapshot()
+    let (rawNative, rawPeak) = collector.snapshot()
+    let filtered = highPass80Hz(rawNative, sampleRate: inputFormat.sampleRate)
+    let resampled = resampleContiguousTo16k(filtered, fromRate: inputFormat.sampleRate)
+    let (pcmSamples, normPeak) = normalizeAndPad16k(resampled)
+    let reportedPeak = max(rawPeak, normPeak)
+
     do {
-        try writeWav16kMono(samples: samples, to: URL(fileURLWithPath: outPath))
-        print(String(format: "DONE %d %.5f", samples.count, maxPeak))
+        try writeWav16kMono(samples: pcmSamples, to: URL(fileURLWithPath: outPath))
+        print(String(format: "DONE %d %.5f", pcmSamples.count, reportedPeak))
         fflush(stdout)
     } catch {
         fputs("Failed to write WAV: \(error.localizedDescription)\n", stderr)
@@ -266,22 +373,25 @@ func runPolish(context: String) async {
         do {
             let session = LanguageModelSession(
                 instructions: """
-                You are an on-device voice dictation text cleaner.
-                Clean the raw speech transcript provided:
-                - Remove filler words (um, uh, like, you know, basically, literally, actually)
-                - Fix grammar, capitalization, and punctuation
-                - Preserve the speaker's exact meaning and technical terms — never invent facts
-                - Follow the context style hint provided
-                - Output ONLY the final cleaned text with no quotes, preamble, or explanation.
+                You are a strict voice dictation copy-editor.
+                Rules:
+                - Preserve EVERY real word the speaker said. NEVER substitute, paraphrase, invent, or reply to questions.
+                - Only fix punctuation, capitalization, paragraphing, and remove unambiguous hesitation sounds (um, uh, erm).
+                - NEVER delete real words like "like", "right", "actually", "literally", or "basically".
+                - If the transcript is a question or command, format it as that exact question or command — do NOT answer it.
+                - Follow the context style hint provided.
+                - Output ONLY the cleaned transcript with no quotes, preamble, or explanation.
                 """
             )
             let words = rawText.split(separator: " ")
             let capped = words.count > 550 ? words.prefix(550).joined(separator: " ") : rawText
             let prompt = """
             Context: \(context) (\(contextHint(for: context)))
-            Raw transcript: \(capped)
+            Transcript to clean verbatim:
+            \(capped)
             """
-            let response = try await session.respond(to: prompt)
+            let options = GenerationOptions(sampling: .greedy)
+            let response = try await session.respond(to: prompt, options: options)
             let cleaned = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
             print(cleaned.isEmpty ? rawText : cleaned)
             return
@@ -304,7 +414,8 @@ func runTranscribe(wavPath: String, language: String, vocabCSV: String) async {
         if language.isEmpty || language == "auto" {
             locale = Locale.current
         } else {
-            locale = Locale(identifier: language)
+            let normalizedLang = language.replacingOccurrences(of: "-", with: "_")
+            locale = Locale(identifier: normalizedLang)
         }
 
         let resolvedLocale = (await SpeechTranscriber.supportedLocale(equivalentTo: locale)) ?? Locale(identifier: "en_US")

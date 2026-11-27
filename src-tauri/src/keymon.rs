@@ -175,7 +175,7 @@ pub fn start_option_key_monitor(app: AppHandle) {
                                 }
                             };
                             if should_start {
-                                begin_overlay_dictation(&app_bg);
+                                begin_overlay_dictation_with_mode(&app_bg, true);
                             }
                         });
                     } else if (!option_down || ctrl_down || cmd_down) && (st.ptt_active || prev_option) {
@@ -336,7 +336,7 @@ mod win_hook {
                                     && !is_hands_free_now(&app_bg)
                                     && !PTT_ACTIVE.swap(true, Ordering::SeqCst)
                                 {
-                                    begin_overlay_dictation(&app_bg);
+                                    begin_overlay_dictation_with_mode(&app_bg, true);
                                 }
                             });
                         }
@@ -558,6 +558,10 @@ pub fn toggle_hands_free_mode(app: &AppHandle, promote_from_ptt: bool) {
 }
 
 pub fn begin_overlay_dictation(app: &AppHandle) {
+    begin_overlay_dictation_with_mode(app, false);
+}
+
+pub fn begin_overlay_dictation_with_mode(app: &AppHandle, push_to_talk: bool) {
     let state = app.state::<AppState>();
     let mut active = state.dictation_active.lock().unwrap();
     if *active || is_hands_free_now(app) {
@@ -608,7 +612,7 @@ pub fn begin_overlay_dictation(app: &AppHandle) {
         if promoted {
             let _ = w.emit("hands-free-start", serde_json::json!({ "alreadyRecording": false }));
         } else {
-            let _ = w.emit("dictation-start", ());
+            let _ = w.emit("dictation-start", serde_json::json!({ "pushToTalk": push_to_talk }));
         }
     }
 }

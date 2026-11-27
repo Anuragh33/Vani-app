@@ -411,6 +411,8 @@ pub async fn dictation_complete(
 
         if let Some(mut action) = parsed_action {
             // Polish any typed payload inside OpenAndType / StartTyping through the local pipeline
+            let ctx_mode = settings.cleanup_context.as_str();
+            let use_llm_for_actions = ctx_mode != "general";
             match &mut action {
                 crate::voice_actions::VoiceAction::OpenAndType { text, .. } if !text.is_empty() => {
                     let mut cleaned_payload = if settings.filler_word_removal {
@@ -418,10 +420,14 @@ pub async fn dictation_complete(
                     } else {
                         text.clone()
                     };
-                    if cfg!(target_os = "macos") && settings.cleanup_provider == "apple" {
-                        if let Ok(out) = apple_ai::polish_on_device(&app, &cleaned_payload, settings.cleanup_context.as_str()).await {
-                            cleaned_payload = out;
+                    if use_llm_for_actions && cfg!(target_os = "macos") && settings.cleanup_provider == "apple" {
+                        if let Ok(out) = apple_ai::polish_on_device(&app, &cleaned_payload, ctx_mode).await {
+                            if cleanup::is_safe_polish(&cleaned_payload, &out, ctx_mode) {
+                                cleaned_payload = out;
+                            }
                         }
+                    } else {
+                        cleaned_payload = cleanup::light_format_general(&cleaned_payload);
                     }
                     *text = cleanup::substitute_snippets(&cleaned_payload, &settings.snippets);
                 }
@@ -431,10 +437,14 @@ pub async fn dictation_complete(
                     } else {
                         payload.clone()
                     };
-                    if cfg!(target_os = "macos") && settings.cleanup_provider == "apple" {
-                        if let Ok(out) = apple_ai::polish_on_device(&app, &cleaned_payload, settings.cleanup_context.as_str()).await {
-                            cleaned_payload = out;
+                    if use_llm_for_actions && cfg!(target_os = "macos") && settings.cleanup_provider == "apple" {
+                        if let Ok(out) = apple_ai::polish_on_device(&app, &cleaned_payload, ctx_mode).await {
+                            if cleanup::is_safe_polish(&cleaned_payload, &out, ctx_mode) {
+                                cleaned_payload = out;
+                            }
                         }
+                    } else {
+                        cleaned_payload = cleanup::light_format_general(&cleaned_payload);
                     }
                     *payload = cleanup::substitute_snippets(&cleaned_payload, &settings.snippets);
                 }
@@ -504,24 +514,36 @@ pub async fn dictation_complete(
         raw_text.clone()
     };
 
-    // 4. AI cleanup: Apple Foundation Models runs 100% on-device (allowed even in Privacy Shield mode!)
+    // 4. AI cleanup:
+    // In General mode, SpeechAnalyzer / Whisper already punctuates & capitalizes faithfully.
+    // Never pass General dictation through a small 3B LLM that can rewrite or answer questions —
+    // keep every spoken word verbatim and only apply AI reformatting in Email/Slack/Notes/Code
+    // (always protected by `is_safe_polish` word-drift guard).
     let ctx = settings.cleanup_context.as_str();
     let mut cleanup_used = "local-rules";
-    if cfg!(target_os = "macos") && settings.cleanup_provider == "apple" {
+    if ctx == "general" {
+        cleaned = cleanup::light_format_general(&cleaned);
+    } else if cfg!(target_os = "macos") && settings.cleanup_provider == "apple" {
         if let Ok(out) = apple_ai::polish_on_device(&app, &cleaned, ctx).await {
-            cleaned = out;
-            cleanup_used = "apple-foundation-model";
+            if cleanup::is_safe_polish(&cleaned, &out, ctx) {
+                cleaned = out;
+                cleanup_used = "apple-foundation-model";
+            }
         }
     } else if !privacy_mode {
         if settings.cleanup_provider == "anthropic" && !settings.anthropic_key.is_empty() {
             if let Ok(out) = cleanup::cleanup_with_anthropic(&cleaned, ctx, &settings.anthropic_key).await {
-                cleaned = out;
-                cleanup_used = "anthropic";
+                if cleanup::is_safe_polish(&cleaned, &out, ctx) {
+                    cleaned = out;
+                    cleanup_used = "anthropic";
+                }
             }
         } else if settings.cleanup_provider == "openai" && !settings.openai_key.is_empty() {
             if let Ok(out) = cleanup::cleanup_with_openai(&cleaned, ctx, &settings.openai_key).await {
-                cleaned = out;
-                cleanup_used = "openai";
+                if cleanup::is_safe_polish(&cleaned, &out, ctx) {
+                    cleaned = out;
+                    cleanup_used = "openai";
+                }
             }
         }
     }

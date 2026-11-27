@@ -27,7 +27,12 @@ impl WhisperEngine {
         translate: bool,
         initial_prompt: &str,
     ) -> Result<String> {
-        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+        // Beam search (beam_size=3) dramatically reduces word substitutions vs greedy best_of=1
+        // while staying fast on Apple Silicon Metal GPU and multi-core CPUs.
+        let mut params = FullParams::new(SamplingStrategy::BeamSearch {
+            beam_size: 3,
+            patience: -1.0,
+        });
         params.set_n_threads(threads as i32);
         params.set_translate(translate);
         params.set_print_special(false);
@@ -41,7 +46,9 @@ impl WhisperEngine {
         params.set_logprob_thold(-1.0);
 
         if language != "auto" && !language.is_empty() {
-            params.set_language(Some(language));
+            // Whisper expects ISO-639-1 base language code ("en" rather than "en-IN" / "en_US")
+            let base_lang = language.split(['-', '_']).next().unwrap_or(language);
+            params.set_language(Some(base_lang));
         }
         if !initial_prompt.is_empty() {
             params.set_initial_prompt(initial_prompt);

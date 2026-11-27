@@ -18,7 +18,12 @@ import { ToggleSwitch, VaniLogo } from "./VaniLogo";
 
 const languageOptions = [
   ["auto", "Auto-detect"],
-  ["en", "English"],
+  ["en-US", "English (US)"],
+  ["en-IN", "English (India)"],
+  ["en-GB", "English (UK)"],
+  ["en-AU", "English (Australia)"],
+  ["en-CA", "English (Canada)"],
+  ["en", "English (Generic)"],
   ["es", "Spanish"],
   ["fr", "French"],
   ["de", "German"],
